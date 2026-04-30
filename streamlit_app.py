@@ -55,11 +55,7 @@ def get_pipeline():
 pipeline = get_pipeline()
 
 def get_db():
-    db = SessionLocal()
-    try:
-        return db
-    finally:
-        db.close()
+    return SessionLocal()
 
 st.title("STOCKSENSE AI 📈")
 st.markdown("### Institutional-Grade Quantitative Research Terminal")
