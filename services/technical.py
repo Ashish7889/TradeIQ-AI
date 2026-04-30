@@ -1,11 +1,11 @@
 import pandas as pd
-import pandas_ta 
 import numpy as np
 
 def calculate_technical_indicators(df: pd.DataFrame):
     """
     Given a pandas DataFrame with OHLCV data, calculates:
-    SMA 20, SMA 50, SMA 200, RSI, MACD, Bollinger Bands, and Volatility.
+    SMA 20, SMA 50, SMA 200, RSI, MACD, Bollinger Bands, and Volatility
+    using native pandas operations to avoid numba/pandas-ta dependencies.
     """
     if df is None or len(df) < 20: # Need at least 20 periods for SMA20 and BB
         return df 
@@ -19,18 +19,30 @@ def calculate_technical_indicators(df: pd.DataFrame):
         return None
         
     # Calculate SMAs
-    df.ta.sma(length=20, append=True)
-    df.ta.sma(length=50, append=True)
-    df.ta.sma(length=200, append=True)
+    df['SMA_20'] = df['Close'].rolling(window=20).mean()
+    df['SMA_50'] = df['Close'].rolling(window=50).mean()
+    df['SMA_200'] = df['Close'].rolling(window=200).mean()
     
-    # RSI
-    df.ta.rsi(length=14, append=True)
+    # RSI (14)
+    delta = df['Close'].diff()
+    up = delta.clip(lower=0)
+    down = -1 * delta.clip(upper=0)
+    ema_up = up.ewm(com=13, adjust=False).mean()
+    ema_down = down.ewm(com=13, adjust=False).mean()
+    rs = ema_up / ema_down
+    df['RSI_14'] = 100 - (100 / (1 + rs))
     
-    # MACD
-    df.ta.macd(fast=12, slow=26, signal=9, append=True)
+    # MACD (12, 26, 9)
+    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD_12_26_9'] = exp1 - exp2
+    df['MACDs_12_26_9'] = df['MACD_12_26_9'].ewm(span=9, adjust=False).mean()
+    df['MACDh_12_26_9'] = df['MACD_12_26_9'] - df['MACDs_12_26_9']
     
-    # Bollinger Bands
-    df.ta.bbands(length=20, std=2, append=True)
+    # Bollinger Bands (20, 2)
+    bb_std = df['Close'].rolling(window=20).std()
+    df['BBL_20_2.0'] = df['SMA_20'] - 2 * bb_std
+    df['BBU_20_2.0'] = df['SMA_20'] + 2 * bb_std
     
     # Volatility (standard deviation of daily returns over 20 days)
     df['Returns'] = df['Close'].pct_change()

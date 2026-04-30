@@ -2,7 +2,6 @@ fastapi>=0.103.1
 uvicorn>=0.23.2
 yfinance>=0.2.28
 pandas>=2.1.0
-pandas-ta>=0.3.14b0
 sqlalchemy>=2.0.20
 pydantic>=2.3.0
 vaderSentiment>=3.3.2
