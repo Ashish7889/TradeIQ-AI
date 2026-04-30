@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STOCKSENSE AI | Intelligent Research Terminal</title>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ========== AUTH MODAL ========== -->
+<div class="modal-overlay" id="authModal">
+    <div class="modal-card">
+        <div class="modal-logo">STOCKSENSE <span>AI</span></div>
+        <p class="modal-sub">Personalized Intelligent Stock Advisory</p>
+        <div class="tab-strip">
+            <button class="tab-btn active" id="showLoginTab" onclick="switchTab('login')">Login</button>
+            <button class="tab-btn" id="showSignupTab" onclick="switchTab('signup')">Sign Up</button>
+        </div>
+        <!-- Login -->
+        <div id="loginForm">
+            <input class="auth-input" type="text" id="loginUsername" placeholder="Username">
+            <input class="auth-input" type="password" id="loginPassword" placeholder="Password">
+            <button class="auth-btn" onclick="handleLogin()">Login</button>
+        </div>
+        <!-- Signup -->
+        <div id="signupForm" style="display:none;">
+            <input class="auth-input" type="text" id="signupUsername" placeholder="Choose a username">
+            <input class="auth-input" type="password" id="signupPassword" placeholder="Choose a password">
+            <button class="auth-btn" onclick="handleSignup()">Create Account</button>
+        </div>
+        <p class="auth-error" id="authError"></p>
+    </div>
+</div>
+
+<div class="app-container" id="appContainer" style="display:none;">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="logo">
+            <h2>STOCKSENSE <span>AI</span></h2>
+        </div>
+
+        <!-- User Info -->
+        <div class="user-info-bar" id="userInfoBar">
+            <div class="user-avatar" id="userAvatar">U</div>
+            <span id="userDisplayName">User</span>
+            <button class="logout-btn" onclick="handleLogout()">Logout</button>
+        </div>
+
+        <!-- Nav Tabs -->
+        <div class="sidebar-nav">
+            <button class="nav-btn active" onclick="showPage('dashboard')">📊 Dashboard</button>
+            <button class="nav-btn" onclick="showPage('advisory')">🤖 AI Advisory</button>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" list="popularTickers" placeholder="Search ticker (e.g. AAPL)..." autocomplete="off">
+            <datalist id="popularTickers">
+                <option value="AAPL">Apple Inc.</option>
+                <option value="MSFT">Microsoft Corp.</option>
+                <option value="NVDA">NVIDIA Corp.</option>
+                <option value="TSLA">Tesla Inc.</option>
+                <option value="AMZN">Amazon.com</option>
+                <option value="GOOGL">Alphabet Inc.</option>
+                <option value="META">Meta Platforms</option>
+                <option value="AMD">Advanced Micro Devices</option>
+                <option value="PLTR">Palantir Technologies</option>
+                <option value="NFLX">Netflix Inc.</option>
+                <option value="SPY">S&P 500 ETF</option>
+                <option value="QQQ">Nasdaq 100 ETF</option>
+                <option value="BTC-USD">Bitcoin USD</option>
+            </datalist>
+            <button id="searchBtn">Analyze</button>
+        </div>
+
+        <div class="watchlist-section">
+            <h3>My Watchlist</h3>
+            <ul id="watchlistList">
+                <!-- Injected here -->
+            </ul>
+            <div class="add-watchlist">
+                <button class="add-btn" id="addToWatchlistBtn">+ Add Current to Watchlist</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ========== MAIN: DASHBOARD PAGE ========== -->
+    <main class="main-content" id="pageDashboard">
+        <header class="dashboard-header">
+            <div class="ticker-info">
+                <h1 id="displayTicker">AAPL</h1>
+                <span class="badge" id="currentPriceBadge" style="margin-right: 15px;">$0.00</span>
+                <span id="lastUpdated" style="font-size: 12px; color: var(--text-secondary);">&nbsp;</span>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <button id="exportPdfBtn" class="btn-outline" style="display: none; height: 32px; padding: 0 15px; font-size: 13px;">Generate PDF Report</button>
+                <div class="recommendation-badge" id="recBadge">WAITING</div>
+            </div>
+        </header>
+
+        <div id="crossoverAlert" class="crossover-banner" style="display: none;">
+            <span id="crossoverIcon">⚠️</span> <span id="crossoverText">Golden Cross Active</span>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Chart -->
+            <div class="panel chart-panel">
+                <div class="chart-header">
+                    <h3>Price Action</h3>
+                    <div class="timeframe-filters" id="timeframeFilters">
+                        <button data-period="1mo">1M</button>
+                        <button data-period="3mo">3M</button>
+                        <button data-period="6mo">6M</button>
+                        <button data-period="1y" class="active">1Y</button>
+                        <button data-period="5y">5Y</button>
+                    </div>
+                </div>
+                <div id="chartContainer" class="chart-container"></div>
+            </div>
+
+            <!-- AI Recommendation -->
+            <div class="panel ai-panel">
+                <h3>AI Recommendation</h3>
+                <div class="grid-2-col">
+                    <div class="ai-stat">
+                        <label>Confidence Score</label>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="confidenceBar"></div>
+                        </div>
+                        <span id="confidenceText">0%</span>
+                    </div>
+                    <div class="ai-stat">
+                        <label>Risk Level</label>
+                        <h4 id="riskLevel">Medium</h4>
+                    </div>
+                </div>
+                <div class="score-breakdown">
+                    <div class="breakdown-item"><label>Technical</label><div class="breakdown-bar"><div class="fill" id="techFill"></div></div></div>
+                    <div class="breakdown-item"><label>Fundamental</label><div class="breakdown-bar"><div class="fill" id="fundFill"></div></div></div>
+                    <div class="breakdown-item"><label>Sentiment</label><div class="breakdown-bar"><div class="fill" id="sentFill"></div></div></div>
+                </div>
+                <div class="explanation-box">
+                    <p id="explanationText">Analyzing data...</p>
+                </div>
+                <div class="elite-metrics-grid" style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="elite-card"><label>Portfolio Allocation</label><div class="value" id="portfolioWeight">--</div></div>
+                    <div class="elite-card"><label>AI Prediction Probe</label><div class="value" id="priceProb">--</div></div>
+                </div>
+            </div>
+
+            <!-- Technicals -->
+            <div class="panel tech-panel">
+                <h3>Technical Signals</h3>
+                <div class="metrics-grid">
+                    <div class="metric"><label>Trend</label><span id="trendDir" class="value">Neutral</span></div>
+                    <div class="metric"><label>RSI</label><span id="rsiVal" class="value">00.00</span><small id="rsiInterp">Neutral</small></div>
+                    <div class="metric"><label>MACD</label><span id="macdVal" class="value">0.00</span><small id="macdInterp">Neutral</small></div>
+                </div>
+            </div>
+
+            <!-- Fundamentals -->
+            <div class="panel fund-panel">
+                <h3>Fundamentals</h3>
+                <div class="metrics-grid">
+                    <div class="metric"><label>Score</label><span id="fundScore" class="value">0/100</span></div>
+                    <div class="metric"><label>P/E Ratio</label><span id="peVal" class="value">-</span></div>
+                    <div class="metric"><label>EPS</label><span id="epsVal" class="value">-</span></div>
+                </div>
+            </div>
+
+            <!-- Sentiment -->
+            <div class="panel sent-panel">
+                <h3>News Sentiment</h3>
+                <div class="sentiment-container">
+                    <h4 id="sentimentLabel">Neutral</h4>
+                    <div class="sentiment-meter">
+                        <div class="pointer" id="sentimentPointer"></div>
+                    </div>
+                    <p id="sentimentHeadlines" class="headlines-text">Retrieving latest news...</p>
+                </div>
+            </div>
+
+            <!-- Backtest -->
+            <div class="panel backtest-panel" style="grid-column: 1 / 2; grid-row: 4 / 5;">
+                <div class="chart-header">
+                    <h3>Strategy Backtest (1Y)</h3>
+                    <div class="ticker-info" style="font-size: 13px; gap: 15px;">
+                        <span>Win Rate: <strong id="winRate" style="color: var(--success);">--</strong></span>
+                        <span>ROI: <strong id="backtestRoi" style="color: var(--accent);">--</strong></span>
+                    </div>
+                </div>
+                <div id="backtestChart" style="height: 180px; width: 100%;"></div>
+            </div>
+
+            <!-- Alerts -->
+            <div class="panel alert-panel" style="grid-column: 2 / 3; grid-row: 4 / 5;">
+                <h3>Price Guard Alerts</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="number" id="alertPrice" placeholder="Target Price ($)" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-color); color: white;">
+                    <button id="setAlertBtn" style="width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">Activate Live Alert</button>
+                    <div id="activeAlerts" style="font-size: 12px; color: var(--text-secondary); text-align: center;">No active alerts.</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="welcomeScreen" class="welcome-screen">
+            <h1>Welcome to StockSense QuantCore</h1>
+            <p>Search for a ticker to generate a comprehensive institutional-grade research report.</p>
+            <div style="margin-top: 40px; text-align: center;">
+                <h4 style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">Popular Stocks to Analyze</h4>
+                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; max-width: 600px; margin: 0 auto;">
+                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='NVDA'; document.getElementById('searchBtn').click();">NVDA</button>
+                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='TSLA'; document.getElementById('searchBtn').click();">TSLA</button>
+                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='AAPL'; document.getElementById('searchBtn').click();">AAPL</button>
+                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='MSFT'; document.getElementById('searchBtn').click();">MSFT</button>
+                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='AMZN'; document.getElementById('searchBtn').click();">AMZN</button>
+                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='META'; document.getElementById('searchBtn').click();">META</button>
+                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='BTC-USD'; document.getElementById('searchBtn').click();">BTC</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ========== MAIN: AI ADVISORY PAGE ========== -->
+    <main class="main-content advisory-page" id="pageAdvisory" style="display:none; padding: 30px;">
+        <div class="advisory-header">
+            <h1>🛡️ Institutional Quant Advisory</h1>
+            <p class="advisory-sub">Configure your preferences, add stocks, and generate a tailored tactical research report powered by QuantCore.</p>
+        </div>
+
+        <div class="advisory-grid">
+            <!-- Preferences Panel -->
+            <div class="panel advisory-panel">
+                <h3>⚙️ Your Preferences</h3>
+                <div class="pref-group">
+                    <label>Risk Level</label>
+                    <div class="pill-group" id="riskGroup">
+                        <button class="pill" data-value="Low">Low</button>
+                        <button class="pill active" data-value="Medium">Medium</button>
+                        <button class="pill" data-value="High">High</button>
+                    </div>
+                </div>
+                <div class="pref-group">
+                    <label>Investment Type</label>
+                    <div class="pill-group" id="investGroup">
+                        <button class="pill" data-value="Short-term">Short-term</button>
+                        <button class="pill active" data-value="Long-term">Long-term</button>
+                    </div>
+                </div>
+                <div class="pref-group">
+                    <label>Analysis Focus</label>
+                    <div class="pill-group" id="focusGroup">
+                        <button class="pill active" data-value="Technical">Technical</button>
+                        <button class="pill" data-value="Fundamental">Fundamental</button>
+                        <button class="pill" data-value="Sentiment">Sentiment</button>
+                    </div>
+                </div>
+                <div class="pref-group">
+                    <label>Budget Range (optional)</label>
+                    <input type="text" id="budgetInput" class="pref-input" placeholder="e.g. $10k-$50k">
+                </div>
+                <div class="pref-group">
+                    <label>Expected Return (optional)</label>
+                    <input type="text" id="returnInput" class="pref-input" placeholder="e.g. 15%">
+                </div>
+                <button class="auth-btn" style="margin-top:10px;" onclick="savePreferences()">💾 Save Preferences</button>
+                <div class="pref-saved" id="prefSavedMsg" style="display:none;">✅ Preferences Saved!</div>
+            </div>
+
+            <!-- Watchlist Builder Panel -->
+            <div class="panel advisory-panel">
+                <div class="watchlist-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <p style="color:var(--text-secondary); font-size:13px; margin:0;">Add the stocks you want to analyze in your personalized report.</p>
+                    <button class="btn-outline" onclick="clearAdvisoryWatchlist()" style="padding:4px 10px; font-size:11px; border-color:var(--danger); color:var(--danger);">Clear All</button>
+                </div>
+                <div class="watchlist-add-row">
+                    <input type="text" id="advisoryTicker" list="popularTickers" class="pref-input" placeholder="Enter ticker (e.g. AAPL)" style="flex:1;">
+                    <button class="add-btn" style="white-space:nowrap;" onclick="addAdvisoryStock()">+ Add Stock</button>
+                </div>
+                <ul class="advisory-watchlist" id="advisoryWatchlist">
+                    <!-- Injected -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- Generate Report -->
+        <div class="panel generate-panel" style="margin-top:24px;">
+            <div class="generate-header">
+                <div>
+                    <h3>🚀 Generate Tactical Report</h3>
+                    <p style="color:var(--text-secondary); font-size:13px;">The QuantCore Research Engine will analyze your stocks against institutional-grade parameters to generate a structured tactical advisory report.</p>
+                </div>
+                <button class="generate-btn" onclick="generateReport()" id="generateBtn">Generate Tactical Report</button>
+            </div>
+        </div>
+
+        <!-- Report Output -->
+        <div class="panel report-output" id="reportOutput" style="display:none; margin-top:24px;">
+            <div class="report-header-bar">
+                <h3>📄 Your Personalized Report</h3>
+                <button class="btn-outline" onclick="window.print()" style="padding: 6px 14px; font-size:12px;">🖨️ Print / Save PDF</button>
+            </div>
+            <div id="reportContent" class="report-content"></div>
+        </div>
+
+        <!-- Report Loading -->
+        <div id="reportLoading" class="report-loading-container" style="display:none; text-align:center;">
+            <div class="financial-grid"></div>
+            <div class="candlestick-ghost-container" id="ghostBars">
+                <!-- Injected via JS -->
+            </div>
+            
+            <div class="progress-ring-wrapper" style="width: 120px; height: 120px; margin: 0 auto 30px;">
+                <div class="laser-sweep"></div>
+                <svg class="progress-ring" width="120" height="120">
+                    <circle class="ring-bg" cx="60" cy="60" r="55"></circle>
+                    <circle class="ring-fill" id="progressRing" cx="60" cy="60" r="55"></circle>
+                </svg>
+                <div id="progressPercent" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; font-weight: 800; color: white;">0%</div>
+            </div>
+
+            <div id="progressStage" style="font-size: 14px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; position: relative; z-index: 5;">Phase 1: Market Data Fetch</div>
+            <p id="progressSubtitle" style="color: var(--text-secondary); font-size: 13px; position: relative; z-index: 5;">QuantCore Intelligence is processing your analysis...</p>
+            
+            <div class="scanning-console" id="scanningConsole">
+                <div class="console-line">[SYSTEM] Initializing Quant Pipeline...</div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="spinner"></div>
+    <p style="margin-top: 15px; font-weight: 600; letter-spacing: 1px; color: var(--accent);">Synthesizing Tactical Market Data with QuantCore...</p>
+</div>
+
+<script src="/static/app.js?v=3"></script>
+</body>
+</html>

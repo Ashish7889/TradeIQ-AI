@@ -1,0 +1,78 @@
+1. Testing Registration
+User already exists, proceeding to login...
+2. Testing Login
+Login successful, token acquired.
+3. Testing Preferences
+Preferences saved: {'risk_level': 'Medium', 'investment_type': 'Long-term', 'focus_type': 'Technical', 'budget_range': '$10k-$50k', 'expected_return': '15%', 'user_id': 1}
+4. Testing Watchlist
+Watchlist: [{'ticker': 'AAPL', 'price': 248.8}, {'ticker': 'MSFT', 'price': 356.77}]
+5. Testing AI Report Generation (Calling Groq API)
+
+--- AI REPORT GENERATED ---
+
+# Personalized Stock Advisory Report
+
+As your dedicated Fintech AI Architect and Product Engineer, I've analyzed the provided stock data against your personalized investment preferences. Your focus on **Technical analysis**, a **Medium Risk** tolerance, and a **Long-term investment horizon** with an **expected return of 15%** guides this report.
+
+---
+
+## 1. Analysis Summary
+
+The current technical landscape for both Apple (AAPL) and Microsoft (MSFT) is predominantly bearish. Both stocks are exhibiting negative momentum indicators, suggesting caution for technically-driven entry points. While their fundamental strengths remain notable, the prevailing technical trends indicate a period of weakness or consolidation. For a long-term investor with a technical focus, this environment calls for patience and careful monitoring for confirmed reversal signals.
+
+---
+
+## 2. Table View
+
+Here's a summary of the analyzed stocks based on your preferences:
+
+| Ticker | Combined Score (0-100) | Risk Level     | Recommendation |
+| :----- | :--------------------- | :------------- | :------------- |
+| AAPL   | 35.75                  | Medium-High    | SELL           |
+| MSFT   | 43.50                  | Medium         | HOLD           |
+
+*Note: The "Combined Score" is weighted 60% on Technicals, 30% on Fundamentals, and 10% on Sentiment, aligning with your focus area.*
+
+---
+
+## 3. Top Recommended Stocks (for Watchlist/Future Entry)
+
+Given the current bearish technical signals for both stocks, neither presents an immediate "BUY" opportunity for a technically-focused investor. However, **Microsoft (MSFT)** is the relatively stronger candidate for your **watchlist** due to its underlying strength and a potential technical setup for future consideration.
+
+### **Microsoft (MSFT)**
+
+*   **Why it's relatively better:**
+    *   **Technical Edge (Oversold RSI):** While MSFT's overall trend is **"Bearish"** with a **"Death Cross Active"** and **"Bearish Crossover" MACD**, its **RSI is significantly "Oversold" at 22.29**. For a technically-minded long-term investor, an oversold condition can signal a potential bounce or a more attractive entry point if accompanied by other bullish reversal signals.
+    *   **Exceptional Fundamentals:** MSFT boasts a perfect **Fundamental Score of 100**, with strong metrics like a PE Ratio of 22.33, EPS of 15.98, and impressive profit margins of 0.3904. This provides a robust long-term foundation.
+    *   **Medium Risk Alignment:** Its volatility (19.94%) falls within your medium-risk tolerance.
+*   **Recommendation Rationale: HOLD**
+    We recommend **HOLD** for MSFT. This means it is not an immediate "BUY" due to the prevailing bearish technical trend. However, its oversold RSI combined with exceptional fundamentals makes it a prime candidate to **monitor closely for bullish reversal signals** (e.g., MACD bullish crossover, RSI moving out of oversold territory, or a confirmed change in trend). Once these technical confirmations emerge, it could present a compelling long-term entry point.
+
+---
+
+## 4. Stocks to Avoid (for Immediate Entry)
+
+### **Apple (AAPL)**
+
+*   **Why to Avoid (for immediate entry):**
+    *   **Weak Technical Profile:** Apple's technical indicators are currently weak. It exhibits a **"Bearish" trend** and a **"Bearish Crossover" MACD**. Although a "Golden Cross Active" is noted, its current bearish trend and MACD suggest this signal is either stale or has failed, making it an unreliable indicator for current momentum. The RSI is "Neutral" (37.97), offering no immediate bullish or oversold signal.
+    *   **Increased Entry Risk:** Despite a strong Fundamental Score of 80, the **overwhelmingly bearish technical signals** make AAPL unsuitable for a technically-focused investor looking to initiate a new position at this time.
+    *   **Medium-High Risk:** The combination of bearish technicals and moderate volatility (16.12%) elevates the risk for immediate entry.
+*   **Recommendation Rationale: SELL**
+    We recommend **SELL** for AAPL. In this context, "SELL" means **it is not advisable to initiate a new long position** based on current technical indicators. It would be prudent to wait for significant and sustained bullish technical confirmation before reconsidering an investment.
+
+---
+
+## 5. Final Suggestion
+
+Based on your preferences for a **Medium Risk, Long-term, Technical Focus** investment with an **expected return of 15%**, neither stock presents an immediate "BUY" opportunity due to prevailing bearish technical trends.
+
+However, **Microsoft (MSFT)** stands out as the **best stock to place on your watchlist** for a potential investment. Its exceptional fundamentals provide a strong long-term anchor, and its current "Oversold" RSI offers a potential setup for a technically-driven entry *if* and *when* confirmed bullish reversal signals emerge.
+
+---
+
+**Disclaimer:** This report is generated by an AI and is based on the provided data and your specified preferences. Investment in stocks carries inherent risks, and past performance is not indicative of future results. Market conditions can change rapidly, and there is no guarantee of achieving the expected return. Always conduct your own due diligence and consider consulting with a qualified financial advisor before making any investment decisions.
+
+---------------------------
+
+All tests passed successfully.
