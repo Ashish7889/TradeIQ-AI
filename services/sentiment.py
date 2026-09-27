@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 analyzer = SentimentIntensityAnalyzer()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+PRIMARY_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
 
 
 # =============================================================================
@@ -146,7 +148,7 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
         if is_ambiguous:
             try:
                 llm = ChatGroq(
-                    model="llama-3.3-70b-versatile",
+                    model=PRIMARY_MODEL,
                     api_key=GROQ_API_KEY,
                     temperature=0.0,
                     # Short timeout to keep the report fast
@@ -167,11 +169,11 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
                 
                 avg_score = float(result.get("sentiment_score", vader_score))
                 label = result.get("sentiment_label", label)
-                source = "Groq Llama 3 (Hybrid Refinement)"
+                source = f"Groq {PRIMARY_MODEL} (Hybrid Refinement)"
                 logger.info(f"[Sentiment] Groq refined {ticker} sentiment.")
                 
             except Exception as e:
-                # GRACEFUL FALLBACK: If Groq is 429 (quota) or 503 (busy), use VADER.
+                # GRACEFUL FALLBACK: If Groq fails, use VADER.
                 # No crash allowed for the user.
                 logger.warning(f"[Sentiment] Groq fallback for {ticker} (using VADER): {e}")
                 source = "VADER (Fallback)"

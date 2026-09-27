@@ -276,8 +276,16 @@
                     <button class="btn-outline" onclick="clearAdvisoryWatchlist()" style="padding:4px 10px; font-size:11px; border-color:var(--danger); color:var(--danger);">Clear All</button>
                 </div>
                 <div class="watchlist-add-row">
-                    <input type="text" id="advisoryTicker" list="popularTickers" class="pref-input" placeholder="Enter ticker (e.g. AAPL)" style="flex:1;">
-                    <button class="add-btn" style="white-space:nowrap;" onclick="addAdvisoryStock()">+ Add Stock</button>
+                    <input type="text" id="advisoryTicker" list="popularTickers" class="pref-input" placeholder="Enter ticker (e.g. AAPL, NVDA, TSLA)" autocomplete="off">
+                    <button class="advisory-add-btn" id="addAdvisoryStockBtn" onclick="addAdvisoryStock()">+ Add Stock</button>
+                </div>
+                <div class="quick-chips">
+                    <span>Quick Add:</span>
+                    <button class="chip-btn" type="button" onclick="quickAddTicker('AAPL')">+ AAPL</button>
+                    <button class="chip-btn" type="button" onclick="quickAddTicker('NVDA')">+ NVDA</button>
+                    <button class="chip-btn" type="button" onclick="quickAddTicker('MSFT')">+ MSFT</button>
+                    <button class="chip-btn" type="button" onclick="quickAddTicker('TSLA')">+ TSLA</button>
+                    <button class="chip-btn" type="button" onclick="quickAddTicker('GOOGL')">+ GOOGL</button>
                 </div>
                 <ul class="advisory-watchlist" id="advisoryWatchlist">
                     <!-- Injected -->

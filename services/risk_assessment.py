@@ -29,7 +29,10 @@ def _fetch_benchmark(period: str = "1y") -> pd.Series:
         df = spy.history(period=period)
         if df.empty:
             return None
-        return df["Close"].pct_change().dropna()
+        returns = df["Close"].pct_change().dropna()
+        if hasattr(returns.index, "tz") and returns.index.tz is not None:
+            returns.index = returns.index.tz_localize(None)
+        return returns
     except Exception as e:
         logger.error(f"Failed to fetch SPY benchmark: {e}")
         return None
@@ -53,6 +56,11 @@ def calculate_risk_metrics(df: pd.DataFrame, risk_free_rate: float = 0.05) -> di
 
     try:
         close = df["Close"].copy()
+        if "Date" in df.columns:
+            date_col = pd.to_datetime(df["Date"])
+            if hasattr(date_col.dt, "tz") and date_col.dt.tz is not None:
+                date_col = date_col.dt.tz_localize(None)
+            close.index = date_col
 
         # ── 1. Daily Log Returns ──────────────────────────────────────────────
         # Log returns are preferred over simple returns in risk calculations
@@ -82,9 +90,16 @@ def calculate_risk_metrics(df: pd.DataFrame, risk_free_rate: float = 0.05) -> di
         if benchmark_returns is not None:
             # Align both series on the same dates
             stock_aligned = log_returns.copy()
-            stock_aligned.index = pd.to_datetime(stock_aligned.index).normalize()
+            stock_idx = pd.to_datetime(stock_aligned.index)
+            if hasattr(stock_idx, "tz") and stock_idx.tz is not None:
+                stock_idx = stock_idx.tz_localize(None)
+            stock_aligned.index = stock_idx.normalize()
+
             bench_aligned = benchmark_returns.copy()
-            bench_aligned.index = pd.to_datetime(bench_aligned.index).normalize()
+            bench_idx = pd.to_datetime(bench_aligned.index)
+            if hasattr(bench_idx, "tz") and bench_idx.tz is not None:
+                bench_idx = bench_idx.tz_localize(None)
+            bench_aligned.index = bench_idx.normalize()
 
             combined = pd.DataFrame({
                 "stock": stock_aligned,

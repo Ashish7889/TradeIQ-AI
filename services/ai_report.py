@@ -33,6 +33,8 @@ from services.quant_backtest import run_institutional_backtest
 load_dotenv()
 logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+PRIMARY_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
 
 
 class ReportOutput(BaseModel):
@@ -45,10 +47,10 @@ class ReportOutput(BaseModel):
     decision_triggers: list = Field(description="Specific data triggers that would change this rating.")
 
 
-def _build_report_chain():
+def _build_report_chain(model: str = PRIMARY_MODEL):
     """Builds the Top-Tier Quant Report Chain returning structured JSON."""
     llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
+        model=model,
         api_key=GROQ_API_KEY,
         temperature=0.05,
     )
@@ -193,17 +195,20 @@ def generate_user_report(db: Session, current_user: User) -> dict:
         return {"error": "Could not fetch data for any stock in your watchlist."}
 
     # ── 4. Groq Synthesis with Structured Output ───────────────────────────
-    try:
-        chain, parser = _build_report_chain()
-        result = chain.invoke({
-            "risk_level": prefs_dict["risk_level"],
-            "focus_type": prefs_dict["focus_type"],
-            "stock_data": json.dumps(stock_analysis_data, indent=2, default=str),
-            "format_instructions": parser.get_format_instructions(),
-        })
-        # result is already a dict per ReportOutput schema
-        return result
+    last_err = None
+    for model_candidate in [PRIMARY_MODEL, FALLBACK_MODEL]:
+        try:
+            chain, parser = _build_report_chain(model=model_candidate)
+            result = chain.invoke({
+                "risk_level": prefs_dict["risk_level"],
+                "focus_type": prefs_dict["focus_type"],
+                "stock_data": json.dumps(stock_analysis_data, indent=2, default=str),
+                "format_instructions": parser.get_format_instructions(),
+            })
+            # result is already a dict per ReportOutput schema
+            return result
+        except Exception as e:
+            logger.warning(f"[Report] Structured synthesis failed with {model_candidate}: {e}")
+            last_err = e
 
-    except Exception as e:
-        logger.error(f"[Report] Structured synthesis failed: {e}")
-        return {"error": f"Report generation failed: {str(e)}"}
+    return {"error": f"Report generation failed: {str(last_err)}"}

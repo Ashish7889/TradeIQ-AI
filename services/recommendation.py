@@ -18,19 +18,21 @@ from langchain_core.output_parsers import JsonOutputParser
 load_dotenv()
 logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+PRIMARY_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
 
 
 # =============================================================================
 #  LANGCHAIN RECOMMENDATION CHAIN
 # =============================================================================
 
-def _build_recommendation_chain():
+def _build_recommendation_chain(model: str = PRIMARY_MODEL):
     """
     Builds a LangChain chain for BUY/HOLD/SELL recommendation.
     Uses: ChatGroq → ChatPromptTemplate → JsonOutputParser
     """
     llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
+        model=model,
         api_key=GROQ_API_KEY,
         temperature=0.0,
     )
@@ -88,28 +90,30 @@ def generate_recommendation(technical_data: dict, sentiment_data: dict, fundamen
         RecommendationOut-compatible dict
     """
     # ── Try LangChain LLMChain ────────────────────────────────────────────────
-    try:
-        chain = _build_recommendation_chain()
-        result = chain.invoke({
-            "technical_data": json.dumps(technical_data or {}, default=str),
-            "fundamental_data": json.dumps(fundamental_data or {}, default=str),
-            "sentiment_data": json.dumps(sentiment_data or {}, default=str),
-        })
+    for model_candidate in [PRIMARY_MODEL, FALLBACK_MODEL]:
+        try:
+            chain = _build_recommendation_chain(model=model_candidate)
+            result = chain.invoke({
+                "technical_data": json.dumps(technical_data or {}, default=str),
+                "fundamental_data": json.dumps(fundamental_data or {}, default=str),
+                "sentiment_data": json.dumps(sentiment_data or {}, default=str),
+            })
 
-        required_keys = [
-            "recommendation", "confidence_score", "trend_direction",
-            "risk_level", "explanation_text", "portfolio_allocation",
-            "price_prediction", "score_breakdown"
-        ]
-        if all(k in result for k in required_keys):
-            logger.info(f"LangChain recommendation chain succeeded: {result['recommendation']}")
-            return result
-        else:
-            raise ValueError("LangChain response missing required keys.")
+            required_keys = [
+                "recommendation", "confidence_score", "trend_direction",
+                "risk_level", "explanation_text", "portfolio_allocation",
+                "price_prediction", "score_breakdown"
+            ]
+            if all(k in result for k in required_keys):
+                logger.info(f"LangChain recommendation chain succeeded with {model_candidate}: {result['recommendation']}")
+                return result
+            else:
+                logger.warning(f"LangChain response with {model_candidate} missing required keys: {result}")
+        except Exception as e:
+            logger.warning(f"LangChain recommendation chain failed with {model_candidate}: {e}")
 
-    except Exception as e:
-        logger.warning(f"LangChain recommendation chain failed, using heuristic: {e}")
-        return _fallback_algorithmic_recommendation(technical_data, sentiment_data, fundamental_data)
+    logger.warning("All LLM recommendation attempts failed, using algorithmic heuristic.")
+    return _fallback_algorithmic_recommendation(technical_data, sentiment_data, fundamental_data)
 
 
 # =============================================================================

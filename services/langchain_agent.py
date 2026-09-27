@@ -48,8 +48,9 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # ── Model Config ─────────────────────────────────────────────────────────────
-PRIMARY_MODEL   = "llama-3.3-70b-versatile"
-FALLBACK_MODEL  = "llama-3.1-8b-instant"
+PRIMARY_MODEL   = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+FALLBACK_MODEL  = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+
 
 
 def invoke_with_retry(chain, inputs: dict, max_retries: int = 3, base_delay: float = 5.0):

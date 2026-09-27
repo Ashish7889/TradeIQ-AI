@@ -26,6 +26,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const addBtn = document.getElementById("addToWatchlistBtn");
     if (addBtn) addBtn.addEventListener("click", () => { if (currentTicker) addToWatchlist(currentTicker); });
 
+    // Advisory Ticker Enter Key
+    const advTickerInput = document.getElementById("advisoryTicker");
+    if (advTickerInput) {
+        advTickerInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                addAdvisoryStock();
+            }
+        });
+    }
+
     // Price Alert
     const alertBtn = document.getElementById("setAlertBtn");
     if (alertBtn) alertBtn.addEventListener("click", () => {
@@ -174,6 +185,10 @@ function showPage(page) {
     document.querySelectorAll(".nav-btn").forEach((b, i) => {
         b.classList.toggle("active", (page === "dashboard" && i === 0) || (page === "advisory" && i === 1));
     });
+    if (page === "advisory") {
+        loadAdvisoryWatchlist();
+        loadPreferences();
+    }
 }
 
 // ========== PREFERENCES ==========
@@ -247,18 +262,24 @@ async function clearAdvisoryWatchlist() {
 async function loadAdvisoryWatchlist() {
     try {
         const res = await fetch("/api/watchlist", { headers: authHeaders() });
+        if (res.status === 401) {
+            handleAuthError();
+            return;
+        }
         if (!res.ok) return;
         const items = await res.json();
         renderAdvisoryWatchlist(items);
-    } catch (e) { console.error("Failed to load advisory watchlist", e); }
+    } catch (e) {
+        console.error("Failed to load advisory watchlist", e);
+    }
 }
 
 function renderAdvisoryWatchlist(items) {
     const ul = document.getElementById("advisoryWatchlist");
     if (!ul) return;
     ul.innerHTML = "";
-    if (items.length === 0) {
-        ul.innerHTML = `<li class="empty-wl">No stocks added yet.</li>`;
+    if (!items || items.length === 0) {
+        ul.innerHTML = `<li class="empty-wl">No stocks in your report list yet. Type a ticker above or click a Quick Add chip!</li>`;
         return;
     }
     items.forEach(item => {
@@ -269,26 +290,54 @@ function renderAdvisoryWatchlist(items) {
                 <strong>${item.ticker}</strong>
                 <span class="wl-price">${item.price ? '$' + item.price : '...'}</span>
             </div>
-            <button class="remove-btn" onclick="removeAdvisoryStock('${item.ticker}')">✕</button>
+            <button class="remove-btn" title="Remove ${item.ticker}" onclick="removeAdvisoryStock('${item.ticker}')">✕</button>
         `;
         ul.appendChild(li);
     });
 }
 
-async function addAdvisoryStock() {
+async function addAdvisoryStock(tickerOverride) {
     const input = document.getElementById("advisoryTicker");
-    const ticker = input.value.trim().toUpperCase();
-    if (!ticker) return;
+    const ticker = (tickerOverride || (input ? input.value : "")).trim().toUpperCase();
+    if (!ticker) {
+        if (input) {
+            input.focus();
+            input.classList.add("input-error");
+            input.placeholder = "Please enter a ticker (e.g. AAPL)...";
+            setTimeout(() => input.classList.remove("input-error"), 1500);
+        }
+        return;
+    }
+    const btn = document.getElementById("addAdvisoryStockBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = "Adding...";
+    }
     try {
-        await fetch("/api/watchlist/add", {
+        const res = await fetch("/api/watchlist/add", {
             method: "POST",
             headers: authHeaders(),
             body: JSON.stringify({ ticker })
         });
-        input.value = "";
+        if (res.status === 401) {
+            handleAuthError();
+            return;
+        }
+        if (input) input.value = "";
         await loadAdvisoryWatchlist();
         await loadWatchlist(); // Also refresh sidebar watchlist
-    } catch (e) { console.error("Failed to add stock", e); }
+    } catch (e) {
+        console.error("Failed to add stock", e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = "+ Add Stock";
+        }
+    }
+}
+
+function quickAddTicker(ticker) {
+    addAdvisoryStock(ticker);
 }
 
 async function removeAdvisoryStock(ticker) {
@@ -297,6 +346,10 @@ async function removeAdvisoryStock(ticker) {
             method: "DELETE",
             headers: authHeaders()
         });
+        if (res.status === 401) {
+            handleAuthError();
+            return;
+        }
         if (res.ok) {
             await loadAdvisoryWatchlist();
             await loadWatchlist(); // also refresh sidebar

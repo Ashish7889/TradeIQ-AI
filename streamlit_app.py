@@ -119,13 +119,13 @@ if analyze_btn and ticker:
                 if "error" in report:
                     st.error(report["error"])
                 else:
-                    st.markdown(report['report_markdown'])
+                    st.markdown(report.get("final_report", ""))
                     
                     st.subheader("AI Decision Matrix")
                     st.json({
-                        "Action": report["decision"]["action"],
-                        "Confidence": f"{report['decision']['confidence']}%",
-                        "Risk Adjustment": report["decision"]["risk_adjustment"]
+                        "Action": report.get("recommendation", "N/A"),
+                        "Confidence": f"{report.get('confidence_score', 0)}%",
+                        "Risk Grade": report.get("risk_grade", "N/A")
                     })
                     
         except Exception as e:
