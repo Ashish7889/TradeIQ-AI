@@ -1,9 +1,9 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (needed for compiling some python packages like bcrypt, pandas-ta)
+# Install system dependencies (needed for compiling some python packages like bcrypt)
 RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
@@ -18,9 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Expose port (Cloud Run uses 8080 by default, Render uses 10000, but we can set it via ENV)
-ENV PORT=8080
-EXPOSE 8080
+# Default port (Render injects PORT=10000 by default)
+ENV PORT=10000
+EXPOSE 10000
 
 # Command to run the application
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
