@@ -10,6 +10,7 @@ For the full sequential pipeline report, see langchain_agent.py.
 
 import json
 import logging
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -57,6 +58,7 @@ def _build_report_chain(model: str = PRIMARY_MODEL):
         model=model,
         api_key=GROQ_API_KEY,
         temperature=0.05,
+        model_kwargs={"response_format": {"type": "json_object"}},
     )
     
     parser = JsonOutputParser(pydantic_object=ReportOutput)
@@ -97,8 +99,76 @@ def _build_report_chain(model: str = PRIMARY_MODEL):
         )),
     ])
 
-    chain = prompt | llm | parser
+    chain = prompt | llm
     return chain, parser
+
+
+def _parse_report_json(raw_text: str, parser: JsonOutputParser) -> dict:
+    """Robustly parses LLM response into the ReportOutput schema dictionary with fallbacks."""
+    if not raw_text or not raw_text.strip():
+        return {
+            "report": "No report content generated.",
+            "final_score": 50,
+            "score_breakdown": {"technical": 50, "fundamental": 50, "sentiment": 50, "risk": 50},
+            "recommendation": "HOLD",
+            "confidence_score": 50,
+            "strategy_accuracy": 50.0,
+            "decision_triggers": [],
+        }
+
+    # 1. Try standard LangChain JsonOutputParser
+    try:
+        data = parser.parse(raw_text)
+        if isinstance(data, dict):
+            return data
+    except Exception as err:
+        logger.debug(f"[Report] Parser parse failed: {err}")
+
+    # 2. Try direct json.loads
+    try:
+        data = json.loads(raw_text)
+        if isinstance(data, dict):
+            return data
+    except Exception as err:
+        logger.debug(f"[Report] Direct json loads failed: {err}")
+
+    # 3. Try markdown fenced code block: ```json ... ```
+    try:
+        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_text, re.DOTALL)
+        if match:
+            data = json.loads(match.group(1))
+            if isinstance(data, dict):
+                return data
+    except Exception as err:
+        logger.debug(f"[Report] Regex json markdown block extraction failed: {err}")
+
+    # 4. Try greedy outermost braces: {...}
+    try:
+        match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
+        if match:
+            data = json.loads(match.group(1))
+            if isinstance(data, dict):
+                return data
+    except Exception as err:
+        logger.debug(f"[Report] Regex outer brace extraction failed: {err}")
+
+    # 5. Safe fallback: wrap the raw LLM output into ReportOutput schema so UI never fails
+    rec = "HOLD"
+    upper = raw_text.upper()
+    if "RECOMMENDATION: BUY" in upper or "**BUY**" in upper:
+        rec = "BUY"
+    elif "RECOMMENDATION: SELL" in upper or "**SELL**" in upper:
+        rec = "SELL"
+
+    return {
+        "report": raw_text.strip(),
+        "final_score": 50,
+        "score_breakdown": {"technical": 50, "fundamental": 50, "sentiment": 50, "risk": 50},
+        "recommendation": rec,
+        "confidence_score": 50,
+        "strategy_accuracy": 50.0,
+        "decision_triggers": [],
+    }
 
 
 def _process_single_ticker(ticker: str) -> tuple:
@@ -204,15 +274,17 @@ def generate_user_report(db: Session, current_user: User) -> dict:
     for model_candidate in [PRIMARY_MODEL, FALLBACK_MODEL]:
         try:
             chain, parser = _build_report_chain(model=model_candidate)
-            result = chain.invoke({
+            ai_msg = chain.invoke({
                 "risk_level": prefs_dict["risk_level"],
                 "focus_type": prefs_dict["focus_type"],
                 "stock_data": json.dumps(stock_analysis_data, indent=2, default=str),
                 "format_instructions": parser.get_format_instructions(),
             })
-            # result is already a dict per ReportOutput schema
+            raw_text = ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
+            result = _parse_report_json(raw_text, parser)
+
             result["model"] = model_candidate
-            result["tickers"] = [s.get("ticker") for s in stock_analysis_data if s.get("ticker")]
+            result["tickers"] = list(stock_analysis_data.keys())
             result["generated_at"] = datetime.now().strftime("%I:%M %p").lstrip("0")
             return result
         except Exception as e:
