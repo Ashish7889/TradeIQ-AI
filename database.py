@@ -1,12 +1,14 @@
 import os
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+from app.config import settings
 
 # Ensure data directory exists for SQLite
 os.makedirs("data", exist_ok=True)
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/stocksense.db")
+SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
 
 # Dynamic DB Engine selection (Startup scaling ready)
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):

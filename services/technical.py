@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 
 def calculate_technical_indicators(df: pd.DataFrame):
     """
@@ -52,7 +53,18 @@ def calculate_technical_indicators(df: pd.DataFrame):
 
 def generate_technical_summary(df: pd.DataFrame) -> dict:
     if df is None or df.empty:
-        return {"tech_score": 50, "numerical_evidence": ["Insufficient data for technical analysis."]}
+        return {
+            "available": False,
+            "tech_score": None,
+            "numerical_evidence": ["Insufficient data for technical analysis."],
+            "rsi": None,
+            "macd": None,
+            "sma20": None,
+            "sma50": None,
+            "sma200": None,
+            "volatility": None,
+            "interpretations": {},
+        }
         
     latest = df.iloc[-1]
     
@@ -115,6 +127,7 @@ def generate_technical_summary(df: pd.DataFrame) -> dict:
     score = max(0, min(100, score))
     
     return {
+        "available": True,
         "tech_score": score,
         "numerical_evidence": evidence,
         "rsi": float(rsi) if not pd.isna(rsi) else None,

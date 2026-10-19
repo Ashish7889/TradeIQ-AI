@@ -1,15 +1,18 @@
-import yfinance as yf
-import pandas as pd
-from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
-from models import Stock
 import logging
+import threading
+from datetime import datetime
+
+import yfinance as yf
 from cachetools import TTLCache
+from sqlalchemy.orm import Session
+
+from models import Stock
 
 logger = logging.getLogger(__name__)
 
 # Institutional-grade caching: 15 min TTL, max 200 items to prevent memory bloat
 market_data_cache = TTLCache(maxsize=200, ttl=900)
+_cache_lock = threading.Lock()
 
 def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
     """
@@ -21,10 +24,16 @@ def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
     cache_key = f"{ticker}_{period}"
     
     try:
-        # Check cache first
-        if cache_key in market_data_cache:
+        # Check cache first with lock
+        with _cache_lock:
+            cached_df = market_data_cache.get(cache_key)
+            if cached_df is not None:
+                df = cached_df.copy()
+            else:
+                df = None
+
+        if df is not None:
             logger.info(f"[Cache Hit] Market data for {cache_key}")
-            df = market_data_cache[cache_key].copy()
         else:
             logger.info(f"[Cache Miss] Fetching data for {cache_key} from Yahoo Finance")
             stock = yf.Ticker(ticker)
@@ -39,8 +48,9 @@ def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
             if 'Date' in df.columns and df['Date'].dt.tz is not None:
                  df['Date'] = df['Date'].dt.tz_convert(None)
                  
-            # Store in cache
-            market_data_cache[cache_key] = df.copy()
+            # Store in cache with lock
+            with _cache_lock:
+                market_data_cache[cache_key] = df.copy()
 
         if db:
             # Update database
@@ -49,8 +59,9 @@ def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
             if not db_stock:
                 try:
                     info = stock.info
-                    company_name = info.get("shortName", ticker)
-                except Exception:
+                    company_name = info.get("shortName", ticker) if isinstance(info, dict) else ticker
+                except Exception as info_err:
+                    logger.warning(f"Could not fetch company name for {ticker}: {info_err}")
                     company_name = ticker
                     
                 db_stock = Stock(
@@ -68,5 +79,5 @@ def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
             
         return df
     except Exception as e:
-        logger.error(f"Error fetching data for {ticker}: {e}")
+        logger.exception(f"Error fetching data for {ticker}: {e}")
         return None

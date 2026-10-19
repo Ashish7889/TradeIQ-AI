@@ -1,0 +1,14 @@
+target-version = "py311"
+line-length = 120
+
+[lint]
+# Select sensible standard rules and ignore opinionated/FastAPI-incompatible rules
+ignore = [
+    "B008",    # FastAPI Depends() in default argument
+    "BLE001",  # Broad exception catching (used for financial service fallbacks)
+    "TRY401",  # Redundant exception object in logger.exception
+    "DTZ003",  # datetime.utcnow() usage
+    "UP035",   # Deprecated import aliases
+    "PLW1508", # Invalid envvar default
+    "C408",    # Unnecessary dict() call
+]

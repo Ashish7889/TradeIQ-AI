@@ -1,17 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from database import get_db
-from models import Watchlist, UserPreference, User
-import schemas
-from security import get_current_user
 
-from services.stock_data import fetch_stock_data
-from services.technical import calculate_technical_indicators, generate_technical_summary
-from services.sentiment import analyze_sentiment
+import schemas
+from database import get_db
+from dependencies import valid_ticker
+from limiter import limiter
+from models import User, UserPreference, Watchlist
+from security import get_current_user
 from services.fundamental import evaluate_fundamentals
-from services.recommendation import generate_recommendation
-from services.quant_backtest import run_institutional_backtest
 from services.langchain_agent import StockAnalysisPipeline
+from services.quant_backtest import run_institutional_backtest
+from services.recommendation import generate_recommendation
+from services.sentiment import analyze_sentiment
+from services.stock_data import fetch_stock_data
+from services.technical import (
+    calculate_technical_indicators,
+    generate_technical_summary,
+)
 
 router = APIRouter()
 
@@ -19,7 +24,7 @@ router = APIRouter()
 _pipeline = StockAnalysisPipeline()
 
 @router.get("/search")
-def search_stock(ticker: str, db: Session = Depends(get_db)):
+def search_stock(ticker: str = Depends(valid_ticker), db: Session = Depends(get_db)):
     """Validates if ticker exists and fetches basic info."""
     df = fetch_stock_data(ticker, period="1d", db=db)
     if df is None:
@@ -27,7 +32,7 @@ def search_stock(ticker: str, db: Session = Depends(get_db)):
     return {"message": "Success", "ticker": ticker.upper()}
 
 @router.get("/stock/{ticker}/price")
-def get_price_history(ticker: str, period: str = "1y", db: Session = Depends(get_db)):
+def get_price_history(ticker: str = Depends(valid_ticker), period: str = "1y", db: Session = Depends(get_db)):
     df = fetch_stock_data(ticker, period=period, db=db)
     if df is None:
         raise HTTPException(status_code=404, detail="Ticker not found")
@@ -36,7 +41,7 @@ def get_price_history(ticker: str, period: str = "1y", db: Session = Depends(get
     import pandas as pd
     try:
         df['Date'] = pd.to_datetime(df['Date'], utc=True).dt.strftime('%Y-%m-%d')
-    except Exception:
+    except (ValueError, TypeError, KeyError):
         df['Date'] = df['Date'].astype(str).str.split(' ').str[0]
         
     # Drop NaNs just in case
@@ -46,7 +51,7 @@ def get_price_history(ticker: str, period: str = "1y", db: Session = Depends(get
     return {"ticker": ticker.upper(), "data": records}
 
 @router.get("/stock/{ticker}/technical", response_model=schemas.TechSummary)
-def get_technical(ticker: str, db: Session = Depends(get_db)):
+def get_technical(ticker: str = Depends(valid_ticker), db: Session = Depends(get_db)):
     df = fetch_stock_data(ticker, period="1y", db=db)
     if df is None:
         raise HTTPException(status_code=404, detail="Ticker not found")
@@ -56,21 +61,28 @@ def get_technical(ticker: str, db: Session = Depends(get_db)):
     return summary
 
 @router.get("/stock/{ticker}/sentiment", response_model=schemas.SentimentSummary)
-def get_sentiment(ticker: str, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def get_sentiment(request: Request, ticker: str = Depends(valid_ticker), db: Session = Depends(get_db)):
     result = analyze_sentiment(ticker, db=db)
     if not result:
         raise HTTPException(status_code=404, detail="No sentiment data available")
     return result
 
 @router.get("/stock/{ticker}/fundamental", response_model=schemas.FundSummary)
-def get_fundamental(ticker: str):
+def get_fundamental(ticker: str = Depends(valid_ticker)):
     result = evaluate_fundamentals(ticker)
     if not result:
         raise HTTPException(status_code=404, detail="No fundamental data available")
     return result
 
 @router.get("/stock/{ticker}/recommendation", response_model=schemas.RecommendationOut)
-def get_recommendation(ticker: str, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def get_recommendation(
+    request: Request,
+    ticker: str = Depends(valid_ticker),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     df = fetch_stock_data(ticker, period="1y", db=db)
     if df is None:
         raise HTTPException(status_code=404, detail="Ticker not found")
@@ -96,7 +108,7 @@ def add_to_watchlist(item: schemas.WatchlistAdd, db: Session = Depends(get_db), 
     return {"message": f"Added {ticker} to watchlist"}
 
 @router.delete("/watchlist/{ticker}")
-def remove_from_watchlist(ticker: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def remove_from_watchlist(ticker: str = Depends(valid_ticker), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ticker = ticker.upper()
     item = db.query(Watchlist).filter(Watchlist.ticker == ticker, Watchlist.user_id == current_user.id).first()
     if not item:
@@ -150,7 +162,7 @@ def update_preferences(prefs_in: schemas.PreferenceUpdate, db: Session = Depends
     db.refresh(prefs)
     return prefs
 @router.get("/stock/{ticker}/backtest")
-def get_backtest(ticker: str, db: Session = Depends(get_db)):
+def get_backtest(ticker: str = Depends(valid_ticker), db: Session = Depends(get_db)):
     df = fetch_stock_data(ticker, period="1y", db=db)
     if df is None or df.empty:
         raise HTTPException(status_code=404, detail="Ticker not found")
@@ -160,7 +172,8 @@ def get_backtest(ticker: str, db: Session = Depends(get_db)):
     return results
 
 @router.post("/report/generate")
-def generate_report(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@limiter.limit("20/minute")
+def generate_report(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from services.ai_report import generate_user_report
     result = generate_user_report(db, current_user)
     if "error" in result:
@@ -169,8 +182,10 @@ def generate_report(db: Session = Depends(get_db), current_user: User = Depends(
 
 
 @router.get("/stock/{ticker}/langchain-analysis", response_model=schemas.AnalysisReportOut)
+@limiter.limit("20/minute")
 def run_langchain_pipeline(
-    ticker: str,
+    request: Request,
+    ticker: str = Depends(valid_ticker),
     user_question: str = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -196,6 +211,20 @@ def run_langchain_pipeline(
 
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+
+    stocks = result.get("quantcore_output", {}).get("stocks", [])
+    stock = next((s for s in stocks if s.get("ticker") == ticker.upper()), stocks[0] if stocks else {})
+    final_score = float(stock.get("score", stock.get("confidence", result.get("confidence_score", 50.0))))
+
+    pipeline_steps = result.get("pipeline_steps", {})
+    if isinstance(pipeline_steps, dict):
+        market_data = pipeline_steps.get("market_data", {})
+        if isinstance(market_data, dict) and "_dataframe" in market_data:
+            pipeline_steps["market_data"] = {k: v for k, v in market_data.items() if k != "_dataframe"}
+
+    result["final_score"] = final_score
+    result["report"] = result.get("final_report", "")
+    result["full_data"] = pipeline_steps
 
     return result
 

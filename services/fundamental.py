@@ -1,5 +1,6 @@
-import yfinance as yf
 import logging
+
+import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,12 @@ def evaluate_fundamentals(ticker: str):
         info = stock.info
         
         if not info:
-             return {"fundamental_score": 50, "numerical_evidence": ["Fundamental data unavailable."]}
+            return {
+                "available": False,
+                "fundamental_score": None,
+                "numerical_evidence": ["Fundamental data unavailable."],
+                "metrics": None
+            }
              
         # Extract metrics
         pe_ratio = info.get('trailingPE') or info.get('forwardPE', 0)
@@ -67,6 +73,7 @@ def evaluate_fundamentals(ticker: str):
         score = max(0, min(100, score))
         
         return {
+            "available": True,
             "fundamental_score": score,
             "numerical_evidence": evidence,
             "metrics": {
@@ -80,4 +87,9 @@ def evaluate_fundamentals(ticker: str):
         
     except Exception as e:
         logger.error(f"Error fetching fundamentals for {ticker}: {e}")
-        return {"fundamental_score": 50, "numerical_evidence": [f"Error: {str(e)}"]}
+        return {
+            "available": False,
+            "fundamental_score": None,
+            "numerical_evidence": [f"Error: {e!s}"],
+            "metrics": None
+        }

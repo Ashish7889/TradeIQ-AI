@@ -19,37 +19,35 @@ Architecture:
   Structured JSON: Conviction score, triggers, key levels, portfolio actions
 """
 
-import os
 import json
 import logging
 import time
-from typing import Optional
 from datetime import datetime
+
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 # ── LangChain Core ────────────────────────────────────────────────────────────
 from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
-from langchain_core.documents import Document
+
+# ── Environment ───────────────────────────────────────────────────────────────
+from app.config import settings
+from services.fundamental import evaluate_fundamentals
+from services.quant_backtest import run_institutional_backtest
+from services.risk_assessment import calculate_risk_metrics
+from services.sentiment import fetch_news_headlines, score_sentiment_with_vader
 
 # ── Project Services (Algorithmic) ───────────────────────────────────────────
 from services.stock_data import fetch_stock_data
-from services.technical import calculate_technical_indicators, generate_technical_summary
-from services.fundamental import evaluate_fundamentals
-from services.sentiment import fetch_news_headlines, score_sentiment_with_vader
-from services.risk_assessment import calculate_risk_metrics
-from services.quant_backtest import run_institutional_backtest
-
-# ── Environment ───────────────────────────────────────────────────────────────
-from dotenv import load_dotenv
-load_dotenv()
+from services.technical import (
+    calculate_technical_indicators,
+    generate_technical_summary,
+)
 
 logger = logging.getLogger(__name__)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# ── Model Config ─────────────────────────────────────────────────────────────
-PRIMARY_MODEL   = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-FALLBACK_MODEL  = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+GROQ_API_KEY = settings.GROQ_API_KEY
+PRIMARY_MODEL = settings.GROQ_MODEL
+FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 
 
 
@@ -390,6 +388,7 @@ class StockAnalysisPipeline:
                 "_dataframe": df,
             }
         except Exception as e:
+            logger.exception(f"Stage 1 market data failed: {e}")
             return {"status": "error", "message": str(e)}
 
     def _stage2_technical(self, df) -> dict:
@@ -399,6 +398,7 @@ class StockAnalysisPipeline:
             summary["status"] = "ok"
             return summary
         except Exception as e:
+            logger.exception(f"Stage 2 technical analysis failed: {e}")
             return {"status": "error", "message": str(e)}
 
     def _stage3_fundamental(self, ticker: str) -> dict:
@@ -409,6 +409,7 @@ class StockAnalysisPipeline:
                 return result
             return {"status": "error", "message": "No fundamental data available."}
         except Exception as e:
+            logger.exception(f"Stage 3 fundamental analysis failed: {e}")
             return {"status": "error", "message": str(e)}
 
     def _stage4_sentiment(self, ticker: str, db) -> dict:
@@ -435,7 +436,7 @@ class StockAnalysisPipeline:
                 "headlines_analyzed": headlines_list[:5],
             }
         except Exception as e:
-            logger.error(f"Stage 4 error: {e}")
+            logger.exception(f"Stage 4 error: {e}")
             try:
                 headlines_list = fetch_news_headlines(ticker)
                 vader_score = score_sentiment_with_vader(headlines_list) if headlines_list else 0.0
@@ -445,6 +446,7 @@ class StockAnalysisPipeline:
                         "vader_score": round(vader_score, 3),
                         "sources_count": len(headlines_list) if headlines_list else 0}
             except Exception as e2:
+                logger.exception(f"Stage 4 fallback error: {e2}")
                 return {"status": "error", "sentiment_score": 0.0, "sentiment_label": "Neutral",
                         "reasoning": str(e2), "vader_score": 0.0, "sources_count": 0}
 
@@ -454,15 +456,17 @@ class StockAnalysisPipeline:
             result["status"] = "ok"
             return result
         except Exception as e:
+            logger.exception(f"Stage 5 risk assessment failed: {e}")
             return {"status": "error", "message": str(e)}
 
     def _stage6_backtest(self, df, ticker) -> dict:
         try:
-            result = run_institutional_backtest(df, ticker, short_window=20, long_window=50)
+            result = run_institutional_backtest(df, ticker)
             result["status"] = "ok"
-            result["strategy"] = "SMA 20/50 Crossover"
+            result["strategy"] = "RSI + SMA50"
             return {k: v for k, v in result.items() if k != "equity_curve"}
         except Exception as e:
+            logger.exception(f"Stage 6 backtest failed: {e}")
             return {"status": "error", "message": str(e)}
 
     def _stage7_quantcore(self, ticker, user_prefs, stage1, stage2, stage3, stage4, stage5, stage6, user_question: str = "") -> dict:
@@ -477,19 +481,22 @@ class StockAnalysisPipeline:
             "risk_data": json.dumps(stage5, indent=2, default=str),
             "backtest_data": json.dumps(stage6, indent=2, default=str),
         }
+        last_err = None
         try:
             # Attempt with primary model (Groq) with retry
             return invoke_with_retry(self.synthesis_chain, payload, max_retries=3, base_delay=5.0)
         except Exception as primary_err:
+            last_err = primary_err
             logger.warning(f"[QuantCore] Primary model failed ({PRIMARY_MODEL}): {primary_err}. Trying fallback model {FALLBACK_MODEL}...")
             try:
                 # Build a fresh chain on fallback model and retry once
                 fallback_chain = _build_synthesis_chain(model=FALLBACK_MODEL)
                 return invoke_with_retry(fallback_chain, payload, max_retries=2, base_delay=3.0)
             except Exception as e:
+                last_err = e
                 logger.error(f"Stage 7 QuantCore error (all models exhausted): {e}")
             return {
-                "error": str(e),
+                "error": str(last_err),
                 "portfolio_summary": {
                     "market_regime": "Unknown", "overall_bias": "Neutral",
                     "top_opportunity": ticker, "biggest_risk": "Synthesis failed",
@@ -522,7 +529,7 @@ class StockAnalysisPipeline:
                 f"\n**Market Regime:** {summary.get('market_regime', 'N/A')} | **Overall Bias:** {summary.get('overall_bias', 'N/A')}",
                 f"\n**One-Line Thesis:** {summary.get('one_line_thesis', 'N/A')}",
                 f"\n**Weight Adjustment:** {summary.get('weight_adjustment_applied', 'Default 45/35/20')}",
-                f"\n---\n",
+                "\n---\n",
                 f"### Decision: {stock.get('decision', 'N/A')} | Score: {stock.get('score', 0)}/100 | Confidence: {stock.get('confidence', 0)}% | Horizon: {stock.get('horizon', 'N/A')}",
                 f"\n**Weights Applied:** Tech {weights.get('technical', 45)}% / Fund {weights.get('fundamental', 35)}% / Sent {weights.get('sentiment', 20)}%",
                 f"\n**Technical View:** {stock.get('technical_view', 'N/A')}",
@@ -532,18 +539,18 @@ class StockAnalysisPipeline:
                 f"\n**Position Sizing:** {stock.get('position_sizing_note', 'N/A')}",
                 f"\n**Final Reasoning:** {stock.get('final_reasoning', 'N/A')}",
                 f"\n**Risk Notes:** {stock.get('risk_notes', 'N/A')}",
-                f"\n### Bull Case",
+                "\n### Bull Case",
                 *[f"- {b}" for b in bull],
-                f"\n### Bear Case",
+                "\n### Bear Case",
                 *[f"- {b}" for b in bear],
-                f"\n### Key Levels",
+                "\n### Key Levels",
                 f"- **Support:** {levels.get('support', 'N/A')}",
                 f"- **Resistance:** {levels.get('resistance', 'N/A')}",
                 f"- **Invalidation:** {levels.get('invalidation', 'N/A')}",
-                f"\n### Trigger Events",
+                "\n### Trigger Events",
                 f"- **Bullish Trigger:** {triggers.get('bullish_trigger', 'N/A')}",
                 f"- **Bearish Trigger:** {triggers.get('bearish_trigger', 'N/A')}",
-                f"\n### Portfolio Actions",
+                "\n### Portfolio Actions",
                 f"- **Best Action Now:** {actions.get('best_action_now', 'N/A')}",
                 f"- **Avoid Now:** {actions.get('avoid_now', 'N/A')}",
                 f"- **Watch Next:** {actions.get('watch_for_next', 'N/A')}",
@@ -552,13 +559,14 @@ class StockAnalysisPipeline:
             ]
 
             if watchlist:
-                lines.append(f"\n### Ranked Watchlist")
+                lines.append("\n### Ranked Watchlist")
                 for item in watchlist:
                     lines.append(f"- **#{item.get('rank')} {item.get('ticker')}** ({item.get('decision','N/A')}, {item.get('score', 0)}/100): {item.get('why_it_ranks_here', '')}")
 
             lines.append(f"\n*{quantcore_output.get('ai_disclaimer', '')}*")
             return "\n".join(lines)
-        except Exception:
+        except Exception as e:
+            logger.exception(f"Failed to build report text for {ticker}: {e}")
             return f"## QuantCore Analysis Complete — {ticker}\n\nView quantcore_output for full structured data."
 
     def _extract_recommendation(self, quantcore_output: dict, tech, fund, sent, risk) -> dict:
@@ -572,37 +580,49 @@ class StockAnalysisPipeline:
                 action = DECISION_MAP.get(stock.get("decision", "HOLD"), "HOLD")
                 confidence = float(stock.get("confidence", 50))
 
-                tech_score = float(tech.get("tech_score", 50))
-                fund_score = float(fund.get("fundamental_score", 50))
-                sent_pct = ((float(sent.get("sentiment_score", 0.0)) + 1) / 2) * 100
-                risk_score = {"A": 90, "B": 75, "C": 55, "D": 35, "F": 15}.get(risk.get("risk_grade", "C"), 50)
+                tech_val = tech.get("tech_score") if tech and tech.get("available", True) else None
+                fund_val = fund.get("fundamental_score") if fund and fund.get("available", True) else None
+                sent_score = sent.get("sentiment_score") if sent else None
+                sent_pct = (((float(sent_score) + 1) / 2) * 100) if sent_score is not None else 50.0
+                risk_score = {"A": 90, "B": 75, "C": 55, "D": 35, "F": 15}.get((risk or {}).get("risk_grade", "C"), 50)
 
                 return {
                     "action": action, "confidence": confidence,
                     "breakdown": {
-                        "technical": round(tech_score, 1),
-                        "fundamental": round(fund_score, 1),
+                        "technical": round(float(tech_val if tech_val is not None else 50.0), 1),
+                        "fundamental": round(float(fund_val if fund_val is not None else 50.0), 1),
                         "sentiment": round(sent_pct, 1),
-                        "risk": round(risk_score, 1),
+                        "risk": round(float(risk_score), 1),
                     }
                 }
         except Exception as e:
             logger.warning(f"QuantCore extraction fallback triggered: {e}")
 
-        # Pure algorithmic fallback
-        tech_score = float(tech.get("tech_score", 50))
-        fund_score = float(fund.get("fundamental_score", 50))
-        sent_pct = ((float(sent.get("sentiment_score", 0.0)) + 1) / 2) * 100
-        risk_score = {"A": 90, "B": 75, "C": 55, "D": 35, "F": 15}.get(risk.get("risk_grade", "C"), 50)
-        final_score = (tech_score * 0.4) + (fund_score * 0.3) + (sent_pct * 0.2) + (risk_score * 0.1)
+        # Pure algorithmic fallback with dynamic weighting for available components
+        tech_val = tech.get("tech_score") if tech and tech.get("available", True) else None
+        fund_val = fund.get("fundamental_score") if fund and fund.get("available", True) else None
+        sent_score = sent.get("sentiment_score") if sent else None
+        sent_pct = (((float(sent_score) + 1) / 2) * 100) if sent_score is not None else 50.0
+        risk_score = {"A": 90, "B": 75, "C": 55, "D": 35, "F": 15}.get((risk or {}).get("risk_grade", "C"), 50)
+
+        weights = []
+        if tech_val is not None:
+            weights.append((float(tech_val), 0.4))
+        if fund_val is not None:
+            weights.append((float(fund_val), 0.3))
+        weights.append((float(sent_pct), 0.2))
+        weights.append((float(risk_score), 0.1))
+
+        total_w = sum(w for _, w in weights)
+        final_score = (sum(score * w for score, w in weights) / total_w) if total_w > 0 else 50.0
         action = "BUY" if final_score >= 62 else "SELL" if final_score <= 42 else "HOLD"
 
         return {
             "action": action, "confidence": round(final_score, 1),
             "breakdown": {
-                "technical": round(tech_score, 1),
-                "fundamental": round(fund_score, 1),
+                "technical": round(float(tech_val if tech_val is not None else 50.0), 1),
+                "fundamental": round(float(fund_val if fund_val is not None else 50.0), 1),
                 "sentiment": round(sent_pct, 1),
-                "risk": round(risk_score, 1),
+                "risk": round(float(risk_score), 1),
             }
         }
