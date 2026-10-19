@@ -14,6 +14,7 @@ Metrics:
 """
 
 import logging
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -123,7 +124,7 @@ def calculate_risk_metrics(df: pd.DataFrame, risk_free_rate: float = 0.05) -> di
         # ── 6. Maximum Drawdown ───────────────────────────────────────────────
         # The largest peak-to-trough percentage decline in the price series.
         # Critical metric for understanding downside risk in real scenarios.
-        cumulative = (1 + log_returns).cumprod()
+        cumulative = np.exp(log_returns.cumsum())
         rolling_max = cumulative.cummax()
         drawdown = (cumulative - rolling_max) / rolling_max
         max_drawdown = round(float(drawdown.min()) * 100, 2)  # negative %

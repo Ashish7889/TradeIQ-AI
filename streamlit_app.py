@@ -1,21 +1,18 @@
-import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 from dotenv import load_dotenv
-import os
 
 # Load environment variables
 load_dotenv()
 
 # Import backend services
 from database import SessionLocal
-from services.stock_data import fetch_stock_data
-from services.technical import calculate_technical_indicators, generate_technical_summary
-from services.sentiment import analyze_sentiment
-from services.fundamental import evaluate_fundamentals
-from services.recommendation import generate_recommendation
-from services.quant_backtest import run_institutional_backtest
 from services.langchain_agent import StockAnalysisPipeline
+from services.stock_data import fetch_stock_data
+from services.technical import (
+    calculate_technical_indicators,
+    generate_technical_summary,
+)
 
 # Page configuration
 st.set_page_config(
@@ -129,4 +126,4 @@ if analyze_btn and ticker:
                     })
                     
         except Exception as e:
-            st.error(f"An error occurred during analysis: {str(e)}")
+            st.error(f"An error occurred during analysis: {e!s}")

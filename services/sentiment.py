@@ -17,31 +17,28 @@ The langchain_agent.py orchestrator calls fetch_news_headlines() and
 score_sentiment_with_vader() directly to build Documents and get baseline scores.
 """
 
-import os
 import logging
-import requests
-from bs4 import BeautifulSoup
-from sqlalchemy.orm import Session
-from models import Stock, SentimentData
 from datetime import datetime
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+import requests
 import yfinance as yf
-import json
+from bs4 import BeautifulSoup
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 # ── LangChain ─────────────────────────────────────────────────────────────────
 from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from sqlalchemy.orm import Session
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-from dotenv import load_dotenv
-load_dotenv()
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 analyzer = SentimentIntensityAnalyzer()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-PRIMARY_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+GROQ_API_KEY = settings.GROQ_API_KEY
+PRIMARY_MODEL = settings.GROQ_MODEL
+FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 
 
 # =============================================================================
@@ -181,7 +178,7 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
         # Persist to DB if session provided
         if db:
             try:
-                from models import Stock, SentimentData
+                from models import SentimentData, Stock
                 db_stock = db.query(Stock).filter(Stock.ticker == ticker).first()
                 if db_stock:
                     record = SentimentData(
@@ -203,10 +200,6 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
             "vader_score": round(vader_score, 3),
             "source": source
         }
-
-    except Exception as e:
-        logger.error(f"Sentiment analysis error for {ticker}: {e}")
-        return None
 
     except Exception as e:
         logger.error(f"Sentiment analysis error for {ticker}: {e}")

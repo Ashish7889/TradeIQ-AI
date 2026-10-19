@@ -1,3 +1,14 @@
+// ========== SECURITY HELPERS ==========
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // ========== STATE ==========
 let chart = null;
 let backtestChart = null;
@@ -129,7 +140,7 @@ async function handleSignup() {
     const username = document.getElementById("signupUsername").value.trim();
     const password = document.getElementById("signupPassword").value;
     if (!username || !password) return showAuthError("Please fill in all fields.");
-    if (password.length < 6) return showAuthError("Password must be at least 6 characters.");
+    if (password.length < 8) return showAuthError("Password must be at least 8 characters.");
 
     try {
         const res = await fetch("/api/auth/signup", {
@@ -285,13 +296,28 @@ function renderAdvisoryWatchlist(items) {
     items.forEach(item => {
         const li = document.createElement("li");
         li.className = "advisory-wl-item";
-        li.innerHTML = `
-            <div class="wl-info">
-                <strong>${item.ticker}</strong>
-                <span class="wl-price">${item.price ? '$' + item.price : '...'}</span>
-            </div>
-            <button class="remove-btn" title="Remove ${item.ticker}" onclick="removeAdvisoryStock('${item.ticker}')">✕</button>
-        `;
+
+        const infoDiv = document.createElement("div");
+        infoDiv.className = "wl-info";
+
+        const strong = document.createElement("strong");
+        strong.textContent = item.ticker;
+
+        const span = document.createElement("span");
+        span.className = "wl-price";
+        span.textContent = item.price ? '$' + item.price : '...';
+
+        infoDiv.appendChild(strong);
+        infoDiv.appendChild(span);
+
+        const btn = document.createElement("button");
+        btn.className = "remove-btn";
+        btn.title = `Remove ${item.ticker}`;
+        btn.textContent = "✕";
+        btn.addEventListener("click", () => removeAdvisoryStock(item.ticker));
+
+        li.appendChild(infoDiv);
+        li.appendChild(btn);
         ul.appendChild(li);
     });
 }
@@ -420,45 +446,57 @@ function displayReport(data) {
     let dashboardHtml = "";
     if (data.final_score !== undefined && data.score_breakdown) {
         const breakdown = data.score_breakdown;
+        const finalScore = escapeHtml(data.final_score);
+        const rec = escapeHtml(data.recommendation || 'N/A');
+        const recBadgeClass = data.recommendation ? escapeHtml(data.recommendation.toLowerCase().replace(/\s+/g, '-')) : 'hold';
+        const techVal = escapeHtml(breakdown.technical);
+        const fundVal = escapeHtml(breakdown.fundamental);
+        const sentVal = escapeHtml(breakdown.sentiment);
+        const riskVal = escapeHtml(breakdown.risk || 0);
+        const confScore = escapeHtml(data.confidence_score || 0);
+        const stratAcc = escapeHtml(data.strategy_accuracy || 68);
+        const triggers = (data.decision_triggers || ["Monitoring market volatility", "Waiting for SMA crossover"])
+            .map(t => `<li>${escapeHtml(t)}</li>`).join('');
+
         dashboardHtml = `
             <div class="quant-dashboard">
                 <div class="main-score-card">
-                    <div class="score-value">${data.final_score}</div>
+                    <div class="score-value">${finalScore}</div>
                     <div class="score-label">FINAL QUANT SCORE</div>
-                    <div class="rec-badge ${data.recommendation ? data.recommendation.toLowerCase().replace(' ', '-') : 'hold'}">${data.recommendation || 'N/A'}</div>
+                    <div class="rec-badge ${recBadgeClass}">${rec}</div>
                 </div>
                 
                 <div class="metrics-grid">
                     <div class="metric-item">
                         <span class="m-label">Technical</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${breakdown.technical}%"></div></div>
-                        <span class="m-value">${breakdown.technical}/100</span>
+                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.technical) || 0}%"></div></div>
+                        <span class="m-value">${techVal}/100</span>
                     </div>
                     <div class="metric-item">
                         <span class="m-label">Fundamental</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${breakdown.fundamental}%"></div></div>
-                        <span class="m-value">${breakdown.fundamental}/100</span>
+                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.fundamental) || 0}%"></div></div>
+                        <span class="m-value">${fundVal}/100</span>
                     </div>
                     <div class="metric-item">
                         <span class="m-label">Sentiment</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${breakdown.sentiment}%"></div></div>
-                        <span class="m-value">${breakdown.sentiment}/100</span>
+                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.sentiment) || 0}%"></div></div>
+                        <span class="m-value">${sentVal}/100</span>
                     </div>
                     <div class="metric-item">
                         <span class="m-label">Risk</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${breakdown.risk || 0}%"></div></div>
-                        <span class="m-value">${breakdown.risk || 0}/100</span>
+                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.risk) || 0}%"></div></div>
+                        <span class="m-value">${riskVal}/100</span>
                     </div>
                 </div>
                 
                 <div class="confidence-footer">
                     <div class="quant-metric">
-                        <strong>Confidence Rank:</strong> ${data.confidence_score || 0}%
-                        <div class="conf-track"><div class="conf-fill" style="width: ${data.confidence_score || 0}%"></div></div>
+                        <strong>Confidence Rank:</strong> ${confScore}%
+                        <div class="conf-track"><div class="conf-fill" style="width: ${Number(data.confidence_score) || 0}%"></div></div>
                     </div>
                     <div class="quant-metric" style="border-left: 2px solid var(--accent); padding-left: 15px; margin-top: 10px;">
                         <strong style="color: gold;">⭐ Strategy Accuracy:</strong> 
-                        <span style="font-weight: bold; font-size: 1.1em; color: var(--accent);">${data.strategy_accuracy || 68}%</span>
+                        <span style="font-weight: bold; font-size: 1.1em; color: var(--accent);">${stratAcc}%</span>
                         <br><small style="opacity: 0.7;">(1-Year Institutional Track Record)</small>
                     </div>
                 </div>
@@ -467,7 +505,7 @@ function displayReport(data) {
             <div class="triggers-panel">
                 <h4>🎯 Decision Change Triggers</h4>
                 <ul>
-                    ${(data.decision_triggers || ["Monitoring market volatility", "Waiting for SMA crossover"]).map(t => `<li>${t}</li>`).join('')}
+                    ${triggers}
                 </ul>
             </div>
             <hr style="margin: 30px 0; border: 0; border-top: 1px solid var(--border);">
@@ -535,7 +573,7 @@ function parseMarkdownOptimized(md) {
 }
 
 function parseInlineMarkdown(text) {
-    return text
+    return escapeHtml(text)
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
         .replace(/`(.+?)`/g, '<code>$1</code>');
@@ -702,7 +740,8 @@ async function handleSearch(ticker) {
     ticker = ticker.trim().toUpperCase();
     showLoading(true);
     try {
-        const searchRes = await fetch(`/api/search?ticker=${ticker}`);
+        const reqHeaders = authToken ? { "Authorization": `Bearer ${authToken}` } : {};
+        const searchRes = await fetch(`/api/search?ticker=${ticker}`, { headers: reqHeaders });
         if (!searchRes.ok) throw new Error("Ticker not found or data unavailable");
 
         currentTicker = ticker;
@@ -712,20 +751,26 @@ async function handleSearch(ticker) {
         if (exportBtn) exportBtn.style.display = "inline-block";
 
         const [priceData, techData, fundData, sentData, recData] = await Promise.all([
-            fetch(`/api/stock/${ticker}/price?period=1y`).then(r => r.json()),
-            fetch(`/api/stock/${ticker}/technical`).then(r => r.json()),
-            fetch(`/api/stock/${ticker}/fundamental`).then(r => r.json()),
-            fetch(`/api/stock/${ticker}/sentiment`).then(r => { if (!r.ok) return null; return r.json(); }).catch(() => null),
-            fetch(`/api/stock/${ticker}/recommendation`).then(r => r.json())
+            fetch(`/api/stock/${ticker}/price?period=1y`, { headers: reqHeaders }).then(r => r.json()),
+            fetch(`/api/stock/${ticker}/technical`, { headers: reqHeaders }).then(r => r.json()),
+            fetch(`/api/stock/${ticker}/fundamental`, { headers: reqHeaders }).then(r => r.json()),
+            fetch(`/api/stock/${ticker}/sentiment`, { headers: reqHeaders }).then(r => { if (!r.ok) return null; return r.json(); }).catch(() => null),
+            fetch(`/api/stock/${ticker}/recommendation`, { headers: reqHeaders }).then(r => {
+                if (r.status === 401) {
+                    handleAuthError();
+                    return null;
+                }
+                return r.json();
+            })
         ]);
 
         updateChart(priceData.data);
         updateTechnicals(techData);
         updateFundamentals(fundData);
         updateSentiment(sentData);
-        updateRecommendation(recData);
+        if (recData) updateRecommendation(recData);
 
-        fetch(`/api/stock/${ticker}/backtest`)
+        fetch(`/api/stock/${ticker}/backtest`, { headers: reqHeaders })
             .then(r => r.json())
             .then(data => updateBacktest(data))
             .catch(e => console.error("Backtest failed", e));
@@ -785,11 +830,22 @@ function updateChart(data) {
 }
 
 function updateTechnicals(data) {
-    document.getElementById("trendDir").innerText = data.interpretations.trend || "Neutral";
+    if (!data || !data.available) {
+        document.getElementById("trendDir").innerText = "Neutral";
+        document.getElementById("rsiVal").innerText = "N/A";
+        document.getElementById("rsiInterp").innerText = "";
+        document.getElementById("macdVal").innerText = "N/A";
+        document.getElementById("macdInterp").innerText = "";
+        const banner = document.getElementById("crossoverAlert");
+        if (banner) banner.style.display = "none";
+        return;
+    }
+    const interp = data.interpretations || {};
+    document.getElementById("trendDir").innerText = interp.trend || "Neutral";
     document.getElementById("rsiVal").innerText = data.rsi ? data.rsi.toFixed(2) : "N/A";
-    document.getElementById("rsiInterp").innerText = data.interpretations.rsi || "";
+    document.getElementById("rsiInterp").innerText = interp.rsi || "";
     document.getElementById("macdVal").innerText = data.macd ? data.macd.toFixed(2) : "N/A";
-    document.getElementById("macdInterp").innerText = data.interpretations.macd || "";
+    document.getElementById("macdInterp").innerText = interp.macd || "";
     const banner = document.getElementById("crossoverAlert");
     if (data.crossover_signal && data.crossover_signal !== "None") {
         banner.style.display = "block";
@@ -801,7 +857,13 @@ function updateTechnicals(data) {
 }
 
 function updateFundamentals(data) {
-    document.getElementById("fundScore").innerText = `${data.fundamental_score}/100`;
+    if (!data || !data.available || !data.metrics) {
+        document.getElementById("fundScore").innerText = "N/A";
+        document.getElementById("peVal").innerText = "N/A";
+        document.getElementById("epsVal").innerText = "N/A";
+        return;
+    }
+    document.getElementById("fundScore").innerText = data.fundamental_score !== null && data.fundamental_score !== undefined ? `${data.fundamental_score}/100` : "N/A";
     document.getElementById("peVal").innerText = data.metrics.pe_ratio || "N/A";
     document.getElementById("epsVal").innerText = data.metrics.eps ? `$${data.metrics.eps}` : "N/A";
 }
@@ -820,24 +882,26 @@ function updateSentiment(data) {
 async function changeTimeframe(period) {
     if (!currentTicker) return;
     try {
-        const priceData = await fetch(`/api/stock/${currentTicker}/price?period=${period}`).then(r => r.json());
+        const reqHeaders = authToken ? { "Authorization": `Bearer ${authToken}` } : {};
+        const priceData = await fetch(`/api/stock/${currentTicker}/price?period=${period}`, { headers: reqHeaders }).then(r => r.json());
         if (priceData && priceData.data) updateChart(priceData.data);
     } catch (e) { console.error("Failed to fetch timeframe data", e); }
 }
 
 function updateRecommendation(data) {
+    if (!data) return;
     const badge = document.getElementById("recBadge");
-    badge.innerText = data.recommendation;
+    badge.innerText = data.recommendation || "HOLD";
     badge.className = "recommendation-badge";
-    badge.classList.add(`rec-${data.recommendation}`);
-    document.getElementById("confidenceText").innerText = `${data.confidence_score}%`;
-    document.getElementById("confidenceBar").style.width = `${data.confidence_score}%`;
-    document.getElementById("riskLevel").innerText = data.risk_level;
-    document.getElementById("explanationText").innerText = data.explanation_text;
+    badge.classList.add(`rec-${data.recommendation || 'HOLD'}`);
+    document.getElementById("confidenceText").innerText = `${data.confidence_score || 0}%`;
+    document.getElementById("confidenceBar").style.width = `${data.confidence_score || 0}%`;
+    document.getElementById("riskLevel").innerText = data.risk_level || "Medium";
+    document.getElementById("explanationText").innerText = data.explanation_text || "";
     if (data.score_breakdown) {
-        document.getElementById("techFill").style.width = `${data.score_breakdown.technical}%`;
-        document.getElementById("fundFill").style.width = `${data.score_breakdown.fundamental}%`;
-        document.getElementById("sentFill").style.width = `${data.score_breakdown.sentiment}%`;
+        document.getElementById("techFill").style.width = `${data.score_breakdown.technical || 0}%`;
+        document.getElementById("fundFill").style.width = `${data.score_breakdown.fundamental || 0}%`;
+        document.getElementById("sentFill").style.width = `${data.score_breakdown.sentiment || 0}%`;
     }
     document.getElementById("portfolioWeight").innerText = data.portfolio_allocation || "10%";
     document.getElementById("priceProb").innerText = data.price_prediction || "Moderate-High";
@@ -873,9 +937,16 @@ async function loadWatchlist() {
         ul.innerHTML = "";
         items.forEach(item => {
             const li = document.createElement("li");
-            li.innerHTML = `<span>${item.ticker}</span> <span>${item.price ? '$' + item.price : '...'}</span>`;
+            const spanTicker = document.createElement("span");
+            spanTicker.textContent = item.ticker;
+            const spanPrice = document.createElement("span");
+            spanPrice.textContent = item.price ? '$' + item.price : '...';
+            li.appendChild(spanTicker);
+            li.appendChild(document.createTextNode(" "));
+            li.appendChild(spanPrice);
             li.addEventListener("click", () => {
-                document.getElementById("searchInput").value = item.ticker;
+                const searchInput = document.getElementById("searchInput");
+                if (searchInput) searchInput.value = item.ticker;
                 handleSearch(item.ticker);
             });
             ul.appendChild(li);
@@ -884,11 +955,13 @@ async function loadWatchlist() {
 }
 
 async function addToWatchlist(ticker) {
+    const cleanTicker = (ticker || "").trim().toUpperCase();
+    if (!cleanTicker) return;
     try {
         await fetch("/api/watchlist/add", {
             method: "POST",
             headers: authHeaders(),
-            body: JSON.stringify({ ticker })
+            body: JSON.stringify({ ticker: cleanTicker })
         });
         loadWatchlist();
         loadAdvisoryWatchlist();

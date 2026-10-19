@@ -1,14 +1,20 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+
+import models
+import schemas
+import security
 from database import get_db
-import models, schemas, security
+from limiter import limiter
 
 router = APIRouter()
 
 @router.post("/signup", response_model=schemas.Token)
-def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def signup(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -31,7 +37,8 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(

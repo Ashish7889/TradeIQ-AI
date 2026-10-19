@@ -1,0 +1,1 @@
+"""StockSense AI app package."""

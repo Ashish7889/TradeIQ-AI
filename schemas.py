@@ -1,9 +1,12 @@
-from pydantic import BaseModel
-from typing import Optional, List, Any
+import re
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
+
 
 class UserCreate(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
+    password: str = Field(..., min_length=8)
 
 class UserLogin(BaseModel):
     username: str
@@ -14,14 +17,14 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    username: str | None = None
 
 class PreferenceUpdate(BaseModel):
-    risk_level: Optional[str] = "Medium"
-    investment_type: Optional[str] = "Long-term"
-    focus_type: Optional[str] = "Technical"
-    budget_range: Optional[str] = None
-    expected_return: Optional[str] = None
+    risk_level: str | None = "Medium"
+    investment_type: str | None = "Long-term"
+    focus_type: str | None = "Technical"
+    budget_range: str | None = None
+    expected_return: str | None = None
 
 class PreferenceOut(PreferenceUpdate):
     user_id: int
@@ -30,15 +33,16 @@ class PreferenceOut(PreferenceUpdate):
         from_attributes = True
 
 class TechSummary(BaseModel):
-    tech_score: float
-    numerical_evidence: List[str]
-    rsi: Optional[float]
-    macd: Optional[float]
-    sma20: Optional[float]
-    sma50: Optional[float]
-    sma200: Optional[float]
-    volatility: Optional[float]
-    interpretations: dict
+    tech_score: float | None = None
+    numerical_evidence: list[str] = []
+    rsi: float | None = None
+    macd: float | None = None
+    sma20: float | None = None
+    sma50: float | None = None
+    sma200: float | None = None
+    volatility: float | None = None
+    interpretations: dict | None = None
+    available: bool | None = True
 
 class SentimentSummary(BaseModel):
     sentiment_score: float
@@ -46,16 +50,17 @@ class SentimentSummary(BaseModel):
     summary_text: str
     
 class FunMetricSummary(BaseModel):
-    pe_ratio: Optional[float]
-    eps: Optional[float]
-    revenue_growth: Optional[float]
-    profit_margins: Optional[float]
-    debt_to_equity: Optional[float]
+    pe_ratio: float | None
+    eps: float | None
+    revenue_growth: float | None
+    profit_margins: float | None
+    debt_to_equity: float | None
 
 class FundSummary(BaseModel):
-    fundamental_score: float
-    numerical_evidence: List[str]
-    metrics: FunMetricSummary
+    fundamental_score: float | None = None
+    numerical_evidence: list[str] = []
+    metrics: FunMetricSummary | None = None
+    available: bool | None = True
 
 class ScoreBreakdown(BaseModel):
     technical: float
@@ -74,6 +79,14 @@ class AnalysisReportOut(BaseModel):
 
 class WatchlistAdd(BaseModel):
     ticker: str
+
+    @field_validator("ticker")
+    @classmethod
+    def validate_ticker(cls, v: str) -> str:
+        cleaned = v.strip().upper()
+        if not re.match(r"^[A-Z.\-]{1,10}$", cleaned):
+            raise ValueError(f"Invalid ticker '{v}'. Must match regex ^[A-Z.\\-]{{1,10}}$")
+        return cleaned
 
 class WatchlistOut(WatchlistAdd):
     id: int

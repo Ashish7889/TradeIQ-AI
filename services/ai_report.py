@@ -8,33 +8,36 @@ This service handles the /report/generate endpoint (watchlist-based report).
 For the full sequential pipeline report, see langchain_agent.py.
 """
 
-import os
 import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dotenv import load_dotenv
+
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 # ── LangChain ─────────────────────────────────────────────────────────────────
 from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 
 # ── Project Services ─────────────────────────────────────────────────────────
 from sqlalchemy.orm import Session
-from models import Watchlist, UserPreference, User
-from services.stock_data import fetch_stock_data
-from services.technical import calculate_technical_indicators, generate_technical_summary
-from services.sentiment import analyze_sentiment
+
+from app.config import settings
+from models import User, UserPreference, Watchlist
 from services.fundamental import evaluate_fundamentals
 from services.quant_backtest import run_institutional_backtest
+from services.sentiment import analyze_sentiment
+from services.stock_data import fetch_stock_data
+from services.technical import (
+    calculate_technical_indicators,
+    generate_technical_summary,
+)
 
-load_dotenv()
 logger = logging.getLogger(__name__)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-PRIMARY_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+GROQ_API_KEY = settings.GROQ_API_KEY
+PRIMARY_MODEL = settings.GROQ_MODEL
+FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 
 
 class ReportOutput(BaseModel):
@@ -211,4 +214,4 @@ def generate_user_report(db: Session, current_user: User) -> dict:
             logger.warning(f"[Report] Structured synthesis failed with {model_candidate}: {e}")
             last_err = e
 
-    return {"error": f"Report generation failed: {str(last_err)}"}
+    return {"error": f"Report generation failed: {last_err!s}"}

@@ -1,11 +1,12 @@
-import pandas as pd
-import numpy as np
 import logging
+
+import pandas as pd
+
 from services.technical import calculate_technical_indicators
 
 logger = logging.getLogger(__name__)
 
-def run_institutional_backtest(df: pd.DataFrame, ticker: str, **kwargs) -> dict:
+def run_institutional_backtest(df: pd.DataFrame, ticker: str) -> dict:
     """
     Simulates the quantitative strategy over the last 1 year.
     
@@ -15,7 +16,7 @@ def run_institutional_backtest(df: pd.DataFrame, ticker: str, **kwargs) -> dict:
     """
     try:
         if df is None or len(df) < 50:
-            return {"accuracy": 65.0, "total_signals": 0} # Conservative baseline
+            return {"available": False, "accuracy": 0.0, "total_signals": 0, "win_rate": 0.0}
         
         data = calculate_technical_indicators(df.copy())
         
@@ -36,25 +37,24 @@ def run_institutional_backtest(df: pd.DataFrame, ticker: str, **kwargs) -> dict:
         signals = data[data['signal'] != 0].copy()
         
         if len(signals) == 0:
-             return {"accuracy": 65.0, "total_signals": 0}
+            return {"available": False, "accuracy": 0.0, "total_signals": 0, "win_rate": 0.0}
 
         signals['is_correct'] = False
         signals.loc[(signals['signal'] == 1) & (signals['forward_return'] > 0), 'is_correct'] = True
         signals.loc[(signals['signal'] == -1) & (signals['forward_return'] < 0), 'is_correct'] = True
         
-        accuracy = (signals['is_correct'].sum() / len(signals)) * 100
+        accuracy = float((signals['is_correct'].sum() / len(signals)) * 100)
+        win_rate = round(accuracy, 1)
         
-        # Normalize to the user's requested 'Elite' range (60-75% is realistic for quant)
-        # We add a slight variance to make it real for different tickers
-        final_accuracy = round(max(62.0, min(74.0, accuracy)), 1)
-        
-        logger.info(f"[Backtest] {ticker} Accuracy: {final_accuracy}% over {len(signals)} signals.")
+        logger.info(f"[Backtest] {ticker} Accuracy: {win_rate}% over {len(signals)} signals.")
         
         return {
-            "accuracy": final_accuracy,
+            "available": True,
+            "accuracy": win_rate,
+            "win_rate": win_rate,
             "total_signals": len(signals),
             "period": "1 Year"
         }
     except Exception as e:
         logger.error(f"Backtest failed for {ticker}: {e}")
-        return {"accuracy": 65.0, "total_signals": 0}
+        return {"available": False, "accuracy": 0.0, "total_signals": 0, "win_rate": 0.0}

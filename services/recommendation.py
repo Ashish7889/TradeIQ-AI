@@ -5,21 +5,21 @@ Upgraded to use LangChain ChatGroq + ChatPromptTemplate + JsonOutputParser.
 Falls back to a deterministic algorithmic heuristic if the LLM chain fails.
 """
 
-import os
 import json
 import logging
-from dotenv import load_dotenv
+
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 # ── LangChain ─────────────────────────────────────────────────────────────────
 from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
 
-load_dotenv()
+from app.config import settings
+
 logger = logging.getLogger(__name__)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-PRIMARY_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+GROQ_API_KEY = settings.GROQ_API_KEY
+PRIMARY_MODEL = settings.GROQ_MODEL
+FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 
 
 # =============================================================================
@@ -130,10 +130,12 @@ def _fallback_algorithmic_recommendation(
     explanations = []
     risk_level = "Medium"
     risk_adjustment = 0
+    weights = []
 
-    # Technical score (35%)
-    tech_score = 50
-    if technical_data:
+    # Technical score (35% standard weight)
+    tech_score = None
+    if technical_data and technical_data.get("available", True) and technical_data.get("tech_score") is not None:
+        tech_score = 50
         interp = technical_data.get("interpretations", {})
         trend = interp.get("trend", "Neutral")
         rsi = interp.get("rsi", "Neutral")
@@ -163,33 +165,40 @@ def _fallback_algorithmic_recommendation(
             risk_level = "Low"
 
         explanations.append(f"Technical setup is {trend}. RSI is {rsi}. MACD shows {macd}.")
+        weights.append((tech_score, 0.35))
     else:
         explanations.append("Technical data unavailable.")
 
-    # Fundamental score (30%)
-    fund_score = 50
-    if fundamental_data:
-        fund_score = fundamental_data.get("fundamental_score", 50)
+    # Fundamental score (30% standard weight)
+    fund_score = None
+    if fundamental_data and fundamental_data.get("available", True) and fundamental_data.get("fundamental_score") is not None:
+        fund_score = float(fundamental_data.get("fundamental_score"))
         if fund_score > 70:
             explanations.append("Strong fundamental metrics.")
         elif fund_score < 40:
             explanations.append("Weak fundamental metrics.")
+        weights.append((fund_score, 0.30))
     else:
         explanations.append("Fundamental data unavailable.")
 
-    # Sentiment score (25%)
-    sent_score = 50
-    if sentiment_data:
+    # Sentiment score (25% standard weight)
+    sent_score = None
+    if sentiment_data and sentiment_data.get("sentiment_score") is not None:
         raw = sentiment_data.get("sentiment_score", 0.0) or 0.0
         sent_score = (raw + 1) * 50
         label = sentiment_data.get("sentiment_label", "Neutral")
         explanations.append(f"News sentiment is {label}.")
+        weights.append((sent_score, 0.25))
     else:
         explanations.append("Sentiment data unavailable.")
 
-    # Combined
-    final_score = (tech_score * 0.35) + (fund_score * 0.30) + (sent_score * 0.25) + risk_adjustment
-    final_score = max(0, min(100, final_score))
+    # Combined with dynamic reweighting
+    if weights:
+        total_w = sum(w for _, w in weights)
+        final_score = (sum(score * w for score, w in weights) / total_w) + risk_adjustment
+        final_score = max(0, min(100, final_score))
+    else:
+        final_score = 50.0
 
     if final_score >= 65:
         rec = "BUY"
@@ -198,7 +207,7 @@ def _fallback_algorithmic_recommendation(
     else:
         rec = "HOLD"
 
-    trend_dir = (technical_data or {}).get("interpretations", {}).get("trend", "Neutral")
+    trend_dir = (technical_data or {}).get("interpretations", {}).get("trend", "Neutral") if technical_data and technical_data.get("available", True) else "Neutral"
 
     return {
         "recommendation": rec,
@@ -209,8 +218,8 @@ def _fallback_algorithmic_recommendation(
         "portfolio_allocation": "Heuristic fallback — LangChain chain unavailable",
         "price_prediction": "Heuristic fallback — LangChain chain unavailable",
         "score_breakdown": {
-            "technical": round(tech_score, 2),
-            "fundamental": round(fund_score, 2),
-            "sentiment": round(sent_score, 2),
+            "technical": round(tech_score if tech_score is not None else 50.0, 2),
+            "fundamental": round(fund_score if fund_score is not None else 50.0, 2),
+            "sentiment": round(sent_score if sent_score is not None else 50.0, 2),
         },
     }

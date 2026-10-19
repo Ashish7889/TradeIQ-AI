@@ -1,26 +1,41 @@
-import os
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import time
 import logging
+import os
+import time
+
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 # Load environment variables FIRST before any service imports
 load_dotenv()
 
-from database import engine, Base
-from routers import api, auth
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
 import uvicorn
+
+from database import Base, engine
+from routers import api, auth
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)
+
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from limiter import limiter
 
 app = FastAPI(
     title="StockSense AI",
     description="Elite quantitative financial research terminal powered by LangChain + Groq AI",
     version="3.0.0",
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(api.router, prefix="/api")
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
