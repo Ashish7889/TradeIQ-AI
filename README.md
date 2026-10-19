@@ -23,7 +23,7 @@ StockSense AI is an institutional-grade quantitative financial research terminal
              │   Quantitative Engines   │   │   LangChain AI Pipeline │
              │ - Technical (RSI, MACD)  │   │ - Groq Llama-3.3-70b    │
              │ - Fundamental (P/E, EPS) │   │ - Fallback Llama-8b     │
-             │ - Risk Engine (VaR, MaxDD│   │ - Structured Analysis   │
+             │ - Risk Engine(VaR, MaxDD)│   │ - Structured Analysis   │
              │ - Backtest (RSI + SMA50) │   └─────────────────────────┘
              └────────────────┬─────────┘
                               │
