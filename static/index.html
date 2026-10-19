@@ -1,349 +1,689 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>STOCKSENSE AI | Intelligent Research Terminal</title>
+    <title>TradeIQ | Institutional Quant Terminal</title>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <link rel="stylesheet" href="/static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+
+<!-- Backdrop for mobile / drawer interactions -->
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
 <!-- ========== AUTH MODAL ========== -->
 <div class="modal-overlay" id="authModal">
     <div class="modal-card">
-        <div class="modal-logo">STOCKSENSE <span>AI</span></div>
-        <p class="modal-sub">Personalized Intelligent Stock Advisory</p>
+        <div class="modal-logo">TradeIQ <span>QUANT</span></div>
+        <p class="modal-sub">Institutional stock intelligence & synthesis</p>
         <div class="tab-strip">
-            <button class="tab-btn active" id="showLoginTab" onclick="switchTab('login')">Login</button>
-            <button class="tab-btn" id="showSignupTab" onclick="switchTab('signup')">Sign Up</button>
+            <button class="tab-btn active" id="showLoginTab" onclick="switchTab('login')">Sign in</button>
+            <button class="tab-btn" id="showSignupTab" onclick="switchTab('signup')">Create account</button>
         </div>
         <!-- Login -->
         <div id="loginForm">
-            <input class="auth-input" type="text" id="loginUsername" placeholder="Username">
-            <input class="auth-input" type="password" id="loginPassword" placeholder="Password">
-            <button class="auth-btn" onclick="handleLogin()">Login</button>
+            <label for="loginUsername">Username</label>
+            <input class="auth-input" type="text" id="loginUsername" placeholder="Enter username" autocomplete="username">
+            <label for="loginPassword">Password</label>
+            <input class="auth-input" type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password">
+            <button class="auth-btn" onclick="handleLogin()">Sign in</button>
         </div>
         <!-- Signup -->
         <div id="signupForm" style="display:none;">
-            <input class="auth-input" type="text" id="signupUsername" placeholder="Choose a username">
-            <input class="auth-input" type="password" id="signupPassword" placeholder="Choose a password">
-            <button class="auth-btn" onclick="handleSignup()">Create Account</button>
+            <label for="signupUsername">Username</label>
+            <input class="auth-input" type="text" id="signupUsername" placeholder="Alphanumeric, 3-30 chars" autocomplete="username">
+            <label for="signupPassword">Password</label>
+            <input class="auth-input" type="password" id="signupPassword" placeholder="Minimum 8 characters" autocomplete="new-password">
+            <button class="auth-btn" onclick="handleSignup()">Create account</button>
         </div>
         <p class="auth-error" id="authError"></p>
     </div>
 </div>
 
+<!-- ========== APPLICATION CONTAINER ========== -->
 <div class="app-container" id="appContainer" style="display:none;">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="logo">
-            <h2>STOCKSENSE <span>AI</span></h2>
+
+    <!-- Left Collapsible Sidebar (Desktop) -->
+    <aside class="sidebar" id="sidebar">
+        <div class="logo-container">
+            <div class="logo">
+                <h2>TradeIQ <span>AI</span></h2>
+            </div>
+            <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+            </button>
         </div>
 
-        <!-- User Info -->
+        <!-- Navigation Tabs -->
+        <nav class="sidebar-nav">
+            <button class="nav-btn active" id="navTerminalBtn" onclick="showPage('dashboard')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m7 8 4 4-4 4"/><path d="M13 16h4"/></svg>
+                <span class="nav-text">Terminal</span>
+            </button>
+            <button class="nav-btn" id="navAdvisoryBtn" onclick="showPage('advisory')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span class="nav-text">Quant Advisory</span>
+            </button>
+            <button class="nav-btn" id="navWatchlistBtn" onclick="scrollToWatchlist()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span class="nav-text">Watchlist</span>
+            </button>
+            <button class="nav-btn" id="navAccountBtn" onclick="showPage('account')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+                <span class="nav-text">Account</span>
+            </button>
+        </nav>
+
+        <!-- Sidebar Watchlist -->
+        <div class="sidebar-watchlist watchlist-section">
+            <div class="sidebar-watchlist-header">
+                <h3>Watchlist</h3>
+                <button class="add-btn" id="addToWatchlistBtn" title="Add current ticker" style="font-size: 11px; color: var(--accent); font-weight: 600;">+ Add</button>
+            </div>
+            <ul class="sidebar-wl-list" id="watchlistList">
+                <!-- Rendered dynamically via app.js -->
+            </ul>
+        </div>
+
+        <!-- Sidebar User Footer -->
         <div class="user-info-bar" id="userInfoBar">
             <div class="user-avatar" id="userAvatar">U</div>
-            <span id="userDisplayName">User</span>
-            <button class="logout-btn" onclick="handleLogout()">Logout</button>
-        </div>
-
-        <!-- Nav Tabs -->
-        <div class="sidebar-nav">
-            <button class="nav-btn active" onclick="showPage('dashboard')">📊 Dashboard</button>
-            <button class="nav-btn" onclick="showPage('advisory')">🤖 AI Advisory</button>
-        </div>
-
-        <div class="search-container">
-            <input type="text" id="searchInput" list="popularTickers" placeholder="Search ticker (e.g. AAPL)..." autocomplete="off">
-            <datalist id="popularTickers">
-                <option value="AAPL">Apple Inc.</option>
-                <option value="MSFT">Microsoft Corp.</option>
-                <option value="NVDA">NVIDIA Corp.</option>
-                <option value="TSLA">Tesla Inc.</option>
-                <option value="AMZN">Amazon.com</option>
-                <option value="GOOGL">Alphabet Inc.</option>
-                <option value="META">Meta Platforms</option>
-                <option value="AMD">Advanced Micro Devices</option>
-                <option value="PLTR">Palantir Technologies</option>
-                <option value="NFLX">Netflix Inc.</option>
-                <option value="SPY">S&P 500 ETF</option>
-                <option value="QQQ">Nasdaq 100 ETF</option>
-                <option value="BTC-USD">Bitcoin USD</option>
-            </datalist>
-            <button id="searchBtn">Analyze</button>
-        </div>
-
-        <div class="watchlist-section">
-            <h3>My Watchlist</h3>
-            <ul id="watchlistList">
-                <!-- Injected here -->
-            </ul>
-            <div class="add-watchlist">
-                <button class="add-btn" id="addToWatchlistBtn">+ Add Current to Watchlist</button>
-            </div>
+            <span class="user-name" id="userDisplayName">User</span>
+            <button class="logout-btn" onclick="handleLogout()" title="Sign out">Exit</button>
         </div>
     </aside>
 
-    <!-- ========== MAIN: DASHBOARD PAGE ========== -->
-    <main class="main-content" id="pageDashboard">
-        <header class="dashboard-header">
-            <div class="ticker-info">
-                <h1 id="displayTicker">AAPL</h1>
-                <span class="badge" id="currentPriceBadge" style="margin-right: 15px;">$0.00</span>
-                <span id="lastUpdated" style="font-size: 12px; color: var(--text-secondary);">&nbsp;</span>
+    <!-- Main Wrapper (Top Bar + Ticker Tape + Body Pages) -->
+    <div class="main-wrapper">
+
+        <!-- Top Bar -->
+        <header class="topbar">
+            <!-- Search Bar -->
+            <div class="topbar-search">
+                <div class="topbar-search-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                </div>
+                <input type="text" id="searchInput" list="popularTickers" placeholder="Search ticker..." autocomplete="off" spellcheck="false">
+                <datalist id="popularTickers">
+                    <option value="AAPL">Apple Inc.</option>
+                    <option value="MSFT">Microsoft Corp.</option>
+                    <option value="NVDA">NVIDIA Corp.</option>
+                    <option value="TSLA">Tesla Inc.</option>
+                    <option value="AMZN">Amazon.com</option>
+                    <option value="GOOGL">Alphabet Inc.</option>
+                    <option value="META">Meta Platforms</option>
+                    <option value="AMD">Advanced Micro Devices</option>
+                    <option value="PLTR">Palantir Technologies</option>
+                    <option value="NFLX">Netflix Inc.</option>
+                    <option value="SPY">S&P 500 ETF</option>
+                    <option value="QQQ">Nasdaq 100 ETF</option>
+                    <option value="BTC-USD">Bitcoin USD</option>
+                </datalist>
             </div>
-            <div style="display: flex; gap: 15px; align-items: center;">
-                <button id="exportPdfBtn" class="btn-outline" style="display: none; height: 32px; padding: 0 15px; font-size: 13px;">Generate PDF Report</button>
-                <div class="recommendation-badge" id="recBadge">WAITING</div>
+
+            <!-- Top Bar Actions (Search Action, Theme Toggle, Mobile Menu) -->
+            <div class="topbar-actions">
+                <button class="btn-primary" id="searchBtn" style="height: 36px; padding: 0 14px; font-size: 12px;">Analyze</button>
+                <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle theme" aria-label="Toggle theme">
+                    <!-- SVG icon injected via JS -->
+                </button>
+                <button class="theme-toggle-btn" id="mobileThemeToggleBtn" style="display:none;" title="Toggle theme" aria-label="Toggle theme"></button>
+                <button class="theme-toggle-btn" id="mobileMenuBtn" style="display:none;" title="Menu" aria-label="Menu">☰</button>
             </div>
         </header>
 
-        <div id="crossoverAlert" class="crossover-banner" style="display: none;">
-            <span id="crossoverIcon">⚠️</span> <span id="crossoverText">Golden Cross Active</span>
+        <!-- Ticker Tape (Horizontally scrolling watchlist under top bar) -->
+        <div class="ticker-tape-container" id="tickerTapeContainer">
+            <div class="ticker-tape-track" id="tickerTapeTrack">
+                <!-- Dynamically populated via app.js -->
+            </div>
         </div>
 
-        <div class="dashboard-grid">
-            <!-- Chart -->
-            <div class="panel chart-panel">
-                <div class="chart-header">
-                    <h3>Price Action</h3>
-                    <div class="timeframe-filters" id="timeframeFilters">
-                        <button data-period="1mo">1M</button>
-                        <button data-period="3mo">3M</button>
-                        <button data-period="6mo">6M</button>
-                        <button data-period="1y" class="active">1Y</button>
-                        <button data-period="5y">5Y</button>
-                    </div>
-                </div>
-                <div id="chartContainer" class="chart-container"></div>
-            </div>
+        <!-- ========== MAIN: DASHBOARD / TERMINAL PAGE ========== -->
+        <main class="main-content" id="pageDashboard">
 
-            <!-- AI Recommendation -->
-            <div class="panel ai-panel">
-                <h3>AI Recommendation</h3>
-                <div class="grid-2-col">
-                    <div class="ai-stat">
-                        <label>Confidence Score</label>
-                        <div class="progress-bar-bg">
-                            <div class="progress-bar-fill" id="confidenceBar"></div>
+            <!-- Hero Section -->
+            <section class="hero-section" id="heroSection">
+                <div class="hero-left">
+                    <div class="hero-title-row">
+                        <h1 class="hero-ticker" id="displayTicker">—</h1>
+                        <span class="hero-company" id="displayCompanyName">—</span>
+                        <div class="price-change-pill" id="priceChangePill" style="display:none;">
+                            <span id="priceChangeSign"></span><span id="priceChangePercent" class="tabular">—</span>
                         </div>
-                        <span id="confidenceText">0%</span>
                     </div>
-                    <div class="ai-stat">
-                        <label>Risk Level</label>
-                        <h4 id="riskLevel">Medium</h4>
-                    </div>
-                </div>
-                <div class="score-breakdown">
-                    <div class="breakdown-item"><label>Technical</label><div class="breakdown-bar"><div class="fill" id="techFill"></div></div></div>
-                    <div class="breakdown-item"><label>Fundamental</label><div class="breakdown-bar"><div class="fill" id="fundFill"></div></div></div>
-                    <div class="breakdown-item"><label>Sentiment</label><div class="breakdown-bar"><div class="fill" id="sentFill"></div></div></div>
-                </div>
-                <div class="explanation-box">
-                    <p id="explanationText">Analyzing data...</p>
-                </div>
-                <div class="elite-metrics-grid" style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="elite-card"><label>Portfolio Allocation</label><div class="value" id="portfolioWeight">--</div></div>
-                    <div class="elite-card"><label>AI Prediction Probe</label><div class="value" id="priceProb">--</div></div>
-                </div>
-            </div>
-
-            <!-- Technicals -->
-            <div class="panel tech-panel">
-                <h3>Technical Signals</h3>
-                <div class="metrics-grid">
-                    <div class="metric"><label>Trend</label><span id="trendDir" class="value">Neutral</span></div>
-                    <div class="metric"><label>RSI</label><span id="rsiVal" class="value">00.00</span><small id="rsiInterp">Neutral</small></div>
-                    <div class="metric"><label>MACD</label><span id="macdVal" class="value">0.00</span><small id="macdInterp">Neutral</small></div>
-                </div>
-            </div>
-
-            <!-- Fundamentals -->
-            <div class="panel fund-panel">
-                <h3>Fundamentals</h3>
-                <div class="metrics-grid">
-                    <div class="metric"><label>Score</label><span id="fundScore" class="value">0/100</span></div>
-                    <div class="metric"><label>P/E Ratio</label><span id="peVal" class="value">-</span></div>
-                    <div class="metric"><label>EPS</label><span id="epsVal" class="value">-</span></div>
-                </div>
-            </div>
-
-            <!-- Sentiment -->
-            <div class="panel sent-panel">
-                <h3>News Sentiment</h3>
-                <div class="sentiment-container">
-                    <h4 id="sentimentLabel">Neutral</h4>
-                    <div class="sentiment-meter">
-                        <div class="pointer" id="sentimentPointer"></div>
-                    </div>
-                    <p id="sentimentHeadlines" class="headlines-text">Retrieving latest news...</p>
-                </div>
-            </div>
-
-            <!-- Backtest -->
-            <div class="panel backtest-panel" style="grid-column: 1 / 2; grid-row: 4 / 5;">
-                <div class="chart-header">
-                    <h3>Strategy Backtest (1Y)</h3>
-                    <div class="ticker-info" style="font-size: 13px; gap: 15px;">
-                        <span>Win Rate: <strong id="winRate" style="color: var(--success);">--</strong></span>
-                        <span>ROI: <strong id="backtestRoi" style="color: var(--accent);">--</strong></span>
+                    <div class="hero-price-row">
+                        <span class="hero-price tabular" id="currentPriceBadge">—</span>
+                        <span class="hero-timestamp" id="lastUpdated">—</span>
                     </div>
                 </div>
-                <div id="backtestChart" style="height: 180px; width: 100%;"></div>
-            </div>
+                <div class="hero-right">
+                    <div class="decision-badge rec-HOLD" id="recBadge">WAITING</div>
+                    <button id="exportPdfBtn" class="btn-secondary" style="display: none;" onclick="window.print()">Export PDF</button>
+                </div>
+            </section>
 
-            <!-- Alerts -->
-            <div class="panel alert-panel" style="grid-column: 2 / 3; grid-row: 4 / 5;">
-                <h3>Price Guard Alerts</h3>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <input type="number" id="alertPrice" placeholder="Target Price ($)" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-color); color: white;">
-                    <button id="setAlertBtn" style="width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">Activate Live Alert</button>
-                    <div id="activeAlerts" style="font-size: 12px; color: var(--text-secondary); text-align: center;">No active alerts.</div>
+            <!-- Crossover Alert Banner (if active) -->
+            <div id="crossoverAlert" class="card" style="display: none; padding: 10px 16px; margin-bottom: 20px; border-left: 4px solid var(--accent); background: var(--bg-surface-elevated);">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500;">
+                    <span id="crossoverIcon">⚡</span>
+                    <span id="crossoverText">Golden Cross Active</span>
                 </div>
             </div>
-        </div>
 
-        <div id="welcomeScreen" class="welcome-screen">
-            <h1>Welcome to StockSense QuantCore</h1>
-            <p>Search for a ticker to generate a comprehensive institutional-grade research report.</p>
-            <div style="margin-top: 40px; text-align: center;">
-                <h4 style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">Popular Stocks to Analyze</h4>
-                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; max-width: 600px; margin: 0 auto;">
-                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='NVDA'; document.getElementById('searchBtn').click();">NVDA</button>
-                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='TSLA'; document.getElementById('searchBtn').click();">TSLA</button>
-                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='AAPL'; document.getElementById('searchBtn').click();">AAPL</button>
-                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='MSFT'; document.getElementById('searchBtn').click();">MSFT</button>
-                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='AMZN'; document.getElementById('searchBtn').click();">AMZN</button>
-                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='META'; document.getElementById('searchBtn').click();">META</button>
-                    <button class="btn-outline" onclick="document.getElementById('searchInput').value='BTC-USD'; document.getElementById('searchBtn').click();">BTC</button>
+            <!-- Row 1: Price Chart (2/3) + QuantCore Decision Card (1/3) -->
+            <div class="dashboard-row-1">
+                <!-- Price Chart Card -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <span class="card-title">Price action</span>
+                        <div class="chart-controls">
+                            <!-- Chart Type Toggle (Area / Candlestick) -->
+                            <div class="chart-type-toggle" id="chartTypeToggle">
+                                <button class="active" id="chartTypeArea" onclick="setChartType('area')">Area</button>
+                                <button id="chartTypeCandle" onclick="setChartType('candlestick')">Candle</button>
+                            </div>
+                            <!-- Segmented Timeframe Controls -->
+                            <div class="segmented-control timeframe-filters" id="timeframeFilters">
+                                <button data-period="5d">1W</button>
+                                <button data-period="1mo">1M</button>
+                                <button data-period="3mo">3M</button>
+                                <button data-period="6mo">6M</button>
+                                <button data-period="1y" class="active">1Y</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="chartContainer" style="min-height: 360px; width: 100%;"></div>
                 </div>
-            </div>
-        </div>
-    </main>
 
-    <!-- ========== MAIN: AI ADVISORY PAGE ========== -->
-    <main class="main-content advisory-page" id="pageAdvisory" style="display:none; padding: 30px;">
-        <div class="advisory-header">
-            <h1>🛡️ Institutional Quant Advisory</h1>
-            <p class="advisory-sub">Configure your preferences, add stocks, and generate a tailored tactical research report powered by QuantCore.</p>
-        </div>
+                <!-- QuantCore Decision Card -->
+                <div class="card decision-card">
+                    <div class="card-header">
+                        <span class="card-title">QuantCore decision</span>
+                        <span class="risk-pill-badge" id="riskLevel">Medium</span>
+                    </div>
+                    <div class="decision-card-body">
+                        <!-- Confidence Bar -->
+                        <div class="confidence-bar-wrap">
+                            <div class="confidence-header">
+                                <span class="label">Confidence rank</span>
+                                <strong id="confidenceText" class="tabular">0%</strong>
+                            </div>
+                            <div class="bar-track">
+                                <div class="bar-fill" id="confidenceBar" style="width: 0%;"></div>
+                            </div>
+                        </div>
 
-        <div class="advisory-grid">
-            <!-- Preferences Panel -->
-            <div class="panel advisory-panel">
-                <h3>⚙️ Your Preferences</h3>
-                <div class="pref-group">
-                    <label>Risk Level</label>
-                    <div class="pill-group" id="riskGroup">
-                        <button class="pill" data-value="Low">Low</button>
-                        <button class="pill active" data-value="Medium">Medium</button>
-                        <button class="pill" data-value="High">High</button>
+                        <!-- Short AI Summary with 5-line Clamp and Read More toggle -->
+                        <div class="ai-summary-container">
+                            <div class="ai-summary-text clamped" id="explanationText">
+                                Enter a ticker to synthesize multi-factor quantitative intelligence...
+                            </div>
+                            <button class="read-more-btn" id="readMoreBtn" onclick="toggleSummaryClamp()">Read more</button>
+                        </div>
+
+                        <!-- Score Breakdown -->
+                        <div class="score-breakdown-row">
+                            <div class="score-mini-item">
+                                <div class="score-mini-labels">
+                                    <span>Technical score</span>
+                                    <span id="techScoreLabel" class="tabular">--</span>
+                                </div>
+                                <div class="bar-track"><div class="bar-fill" id="techFill" style="width: 0%;"></div></div>
+                            </div>
+                            <div class="score-mini-item">
+                                <div class="score-mini-labels">
+                                    <span>Fundamental score</span>
+                                    <span id="fundScoreLabel" class="tabular">--</span>
+                                </div>
+                                <div class="bar-track"><div class="bar-fill" id="fundFill" style="width: 0%;"></div></div>
+                            </div>
+                            <div class="score-mini-item">
+                                <div class="score-mini-labels">
+                                    <span>Sentiment score</span>
+                                    <span id="sentScoreLabel" class="tabular">--</span>
+                                </div>
+                                <div class="bar-track"><div class="bar-fill" id="sentFill" style="width: 0%;"></div></div>
+                            </div>
+                        </div>
+
+                        <!-- Allocation & Price Trajectory -->
+                        <div class="allocation-grid">
+                            <div class="allocation-item">
+                                <label>Target allocation</label>
+                                <div class="val tabular" id="portfolioWeight">--</div>
+                            </div>
+                            <div class="allocation-item">
+                                <label>Price trajectory</label>
+                                <div class="val" id="priceProb">--</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="pref-group">
-                    <label>Investment Type</label>
-                    <div class="pill-group" id="investGroup">
-                        <button class="pill" data-value="Short-term">Short-term</button>
-                        <button class="pill active" data-value="Long-term">Long-term</button>
-                    </div>
-                </div>
-                <div class="pref-group">
-                    <label>Analysis Focus</label>
-                    <div class="pill-group" id="focusGroup">
-                        <button class="pill active" data-value="Technical">Technical</button>
-                        <button class="pill" data-value="Fundamental">Fundamental</button>
-                        <button class="pill" data-value="Sentiment">Sentiment</button>
-                    </div>
-                </div>
-                <div class="pref-group">
-                    <label>Budget Range (optional)</label>
-                    <input type="text" id="budgetInput" class="pref-input" placeholder="e.g. $10k-$50k">
-                </div>
-                <div class="pref-group">
-                    <label>Expected Return (optional)</label>
-                    <input type="text" id="returnInput" class="pref-input" placeholder="e.g. 15%">
-                </div>
-                <button class="auth-btn" style="margin-top:10px;" onclick="savePreferences()">💾 Save Preferences</button>
-                <div class="pref-saved" id="prefSavedMsg" style="display:none;">✅ Preferences Saved!</div>
             </div>
 
-            <!-- Watchlist Builder Panel -->
-            <div class="panel advisory-panel">
-                <div class="watchlist-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <p style="color:var(--text-secondary); font-size:13px; margin:0;">Add the stocks you want to analyze in your personalized report.</p>
-                    <button class="btn-outline" onclick="clearAdvisoryWatchlist()" style="padding:4px 10px; font-size:11px; border-color:var(--danger); color:var(--danger);">Clear All</button>
+            <!-- Row 2: Compact Metrics Grid (4 items) -->
+            <div class="metrics-grid-4">
+                <!-- 1. Technicals -->
+                <div class="metric-card">
+                    <div class="metric-card-header">
+                        <span>Technicals</span>
+                        <span id="trendDir" class="val" style="font-size: 11px; font-weight: 600; color: var(--accent);">Neutral</span>
+                    </div>
+                    <div class="metric-stat-cols">
+                        <div class="mini-stat">
+                            <label>RSI (14)</label>
+                            <span id="rsiVal" class="val tabular">--</span>
+                            <small id="rsiInterp"></small>
+                        </div>
+                        <div class="mini-stat">
+                            <label>MACD</label>
+                            <span id="macdVal" class="val tabular">--</span>
+                            <small id="macdInterp"></small>
+                        </div>
+                    </div>
                 </div>
-                <div class="watchlist-add-row">
-                    <input type="text" id="advisoryTicker" list="popularTickers" class="pref-input" placeholder="Enter ticker (e.g. AAPL, NVDA, TSLA)" autocomplete="off">
-                    <button class="advisory-add-btn" id="addAdvisoryStockBtn" onclick="addAdvisoryStock()">+ Add Stock</button>
-                </div>
-                <div class="quick-chips">
-                    <span>Quick Add:</span>
-                    <button class="chip-btn" type="button" onclick="quickAddTicker('AAPL')">+ AAPL</button>
-                    <button class="chip-btn" type="button" onclick="quickAddTicker('NVDA')">+ NVDA</button>
-                    <button class="chip-btn" type="button" onclick="quickAddTicker('MSFT')">+ MSFT</button>
-                    <button class="chip-btn" type="button" onclick="quickAddTicker('TSLA')">+ TSLA</button>
-                    <button class="chip-btn" type="button" onclick="quickAddTicker('GOOGL')">+ GOOGL</button>
-                </div>
-                <ul class="advisory-watchlist" id="advisoryWatchlist">
-                    <!-- Injected -->
-                </ul>
-            </div>
-        </div>
 
-        <!-- Generate Report -->
-        <div class="panel generate-panel" style="margin-top:24px;">
-            <div class="generate-header">
+                <!-- 2. Fundamentals -->
+                <div class="metric-card">
+                    <div class="metric-card-header">
+                        <span>Fundamentals</span>
+                    </div>
+                    <div class="metric-stat-cols">
+                        <div class="mini-stat">
+                            <label>Health score</label>
+                            <span id="fundScore" class="val tabular">--</span>
+                        </div>
+                        <div class="mini-stat">
+                            <label>P/E ratio</label>
+                            <span id="peVal" class="val tabular">--</span>
+                        </div>
+                        <div class="mini-stat">
+                            <label>Trailing EPS</label>
+                            <span id="epsVal" class="val tabular">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Sentiment -->
+                <div class="metric-card">
+                    <div class="metric-card-header">
+                        <span>Sentiment</span>
+                        <span id="sentimentLabel" class="val" style="font-size: 11px; font-weight: 600;">Neutral</span>
+                    </div>
+                    <div class="sentiment-meter-bar">
+                        <div class="sentiment-meter-needle" id="sentimentPointer"></div>
+                    </div>
+                    <small id="sentimentSummaryBrief" style="font-size: 11px; color: var(--text-secondary); line-height: 1.3;">Awaiting asset analysis...</small>
+                </div>
+
+                <!-- 4. Price Guard Alert -->
+                <div class="metric-card">
+                    <div class="metric-card-header">
+                        <span>Price Guard</span>
+                    </div>
+                    <div class="alert-input-row">
+                        <input type="number" id="alertPrice" placeholder="Target ($)" step="0.5">
+                        <button id="setAlertBtn" class="btn-primary" style="height: 32px; padding: 0 10px; font-size: 11px;">Set</button>
+                    </div>
+                    <div id="activeAlerts" style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">No active alerts.</div>
+                </div>
+            </div>
+
+            <!-- News List Section (Separate headlines split on | with 2-line clamp) -->
+            <div class="news-section-card">
+                <div class="card-header">
+                    <span class="card-title">Market intelligence headlines</span>
+                </div>
+                <div id="sentimentHeadlines">
+                    <p style="font-size: 12px; color: var(--text-muted); padding: 8px 0;">Enter a ticker to fetch real-time financial headlines...</p>
+                </div>
+            </div>
+
+            <!-- Watchlist Detailed Card (Hidden on mobile under 768px) -->
+            <div class="watchlist-full-card" id="watchlistFullCard">
+                <div class="card-header">
+                    <span class="card-title">Watchlist assets</span>
+                    <button class="btn-secondary" onclick="document.getElementById('searchInput').focus()">+ Add to watchlist</button>
+                </div>
+                <table class="wl-table">
+                    <thead>
+                        <tr>
+                            <th>Asset</th>
+                            <th>Company</th>
+                            <th>Price</th>
+                            <th>Daily change</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="watchlistTableBody">
+                        <!-- Populated via app.js -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Strategy Backtest Card at Bottom -->
+            <div class="backtest-card">
+                <div class="card-header">
+                    <span class="card-title">Quantitative backtest (1-Year RSI + SMA50 Simulation)</span>
+                    <div class="backtest-stats">
+                        <span>Win rate: <strong id="winRate" class="tabular" style="color: var(--text-primary);">—</strong></span>
+                        <span>Evaluation: <strong id="backtestRoi" class="tabular" style="color: var(--text-secondary);">—</strong></span>
+                    </div>
+                </div>
+                <div id="backtestChart" style="min-height: 140px; width: 100%;"></div>
+            </div>
+
+            <!-- Welcome Screen (Initial empty state) -->
+            <div id="welcomeScreen" class="card" style="text-align: center; padding: 48px 24px; margin-bottom: 24px;">
+                <h2 style="font-size: 20px; margin-bottom: 8px;">Institutional stock terminal</h2>
+                <p style="color: var(--text-secondary); max-width: 460px; margin: 0 auto 20px; font-size: 13px;">
+                    Deterministic quantitative screening, volatility modeling, and LangChain LLM synthesis.
+                </p>
+                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                    <button class="btn-outline" onclick="handleSearch('NVDA')">NVDA</button>
+                    <button class="btn-outline" onclick="handleSearch('AAPL')">AAPL</button>
+                    <button class="btn-outline" onclick="handleSearch('MSFT')">MSFT</button>
+                    <button class="btn-outline" onclick="handleSearch('TSLA')">TSLA</button>
+                    <button class="btn-outline" onclick="handleSearch('AMZN')">AMZN</button>
+                    <button class="btn-outline" onclick="handleSearch('META')">META</button>
+                    <button class="btn-outline" onclick="handleSearch('SPY')">SPY</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- ========== MAIN: AI ADVISORY / REPORT PAGE ========== -->
+        <main class="main-content advisory-page" id="pageAdvisory" style="display:none;">
+            <div class="advisory-header">
+                <h1>Tactical Quant Advisory</h1>
+                <p class="advisory-sub">Configure portfolio parameters, evaluate candidates, and generate research memorandums.</p>
+            </div>
+
+            <div class="advisory-grid">
+                <!-- Tactical Parameters -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Tactical profile</span>
+                    </div>
+                    <div class="pref-group">
+                        <label>Risk tolerance</label>
+                        <div class="pill-group" id="riskGroup">
+                            <button class="pill" data-value="Low">Conservative</button>
+                            <button class="pill active" data-value="Medium">Moderate</button>
+                            <button class="pill" data-value="High">Aggressive</button>
+                        </div>
+                    </div>
+                    <div class="pref-group">
+                        <label>Investment horizon</label>
+                        <div class="pill-group" id="investGroup">
+                            <button class="pill" data-value="Short-term">Tactical (Short-term)</button>
+                            <button class="pill active" data-value="Long-term">Strategic (Long-term)</button>
+                        </div>
+                    </div>
+                    <div class="pref-group">
+                        <label>Analysis weighting</label>
+                        <div class="pill-group" id="focusGroup">
+                            <button class="pill active" data-value="Technical">Quantitative technical</button>
+                            <button class="pill" data-value="Fundamental">Fundamental valuation</button>
+                            <button class="pill" data-value="Sentiment">Market sentiment</button>
+                        </div>
+                    </div>
+                    <div class="pref-group">
+                        <label>Portfolio budget (optional)</label>
+                        <input type="text" id="budgetInput" class="auth-input" placeholder="e.g. $25,000" style="margin-bottom: 0;">
+                    </div>
+                    <div class="pref-group">
+                        <label>Target annual return (optional)</label>
+                        <input type="text" id="returnInput" class="auth-input" placeholder="e.g. 18%" style="margin-bottom: 0;">
+                    </div>
+                    <button class="btn-primary" style="margin-top: 14px; width: 100%;" onclick="savePreferences()">Save parameters</button>
+                    <div id="prefSavedMsg" style="display:none; color: var(--success); font-size: 11px; text-align: center; margin-top: 8px;">Parameters saved successfully.</div>
+                </div>
+
+                <!-- Asset Basket Builder -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Asset basket</span>
+                        <button class="btn-secondary" onclick="clearAdvisoryWatchlist()" style="padding: 2px 8px; font-size: 11px;">Clear all</button>
+                    </div>
+                    <label>Candidate tickers for synthesis</label>
+                    <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                        <input type="text" id="advisoryTicker" list="popularTickers" class="auth-input" placeholder="Enter ticker (e.g. AAPL, NVDA)" style="margin-bottom: 0; text-transform: uppercase;">
+                        <button class="btn-primary" id="addAdvisoryStockBtn" onclick="addAdvisoryStock()">+ Add</button>
+                    </div>
+                    <div class="quick-chips">
+                        <span class="label" style="margin-bottom: 0;">Quick:</span>
+                        <button class="quick-chip" type="button" onclick="quickAddTicker('AAPL')">AAPL</button>
+                        <button class="quick-chip" type="button" onclick="quickAddTicker('NVDA')">NVDA</button>
+                        <button class="quick-chip" type="button" onclick="quickAddTicker('MSFT')">MSFT</button>
+                        <button class="quick-chip" type="button" onclick="quickAddTicker('TSLA')">TSLA</button>
+                        <button class="quick-chip" type="button" onclick="quickAddTicker('AMZN')">AMZN</button>
+                    </div>
+                    <ul id="advisoryWatchlist" style="list-style: none; margin-top: 14px; max-height: 240px; overflow-y: auto;">
+                        <!-- Populated via app.js -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Run Synthesis Action -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+                    <div>
+                        <h3 style="font-size: 14px; margin-bottom: 4px;">Run QuantCore Intelligence Engine</h3>
+                        <p style="color: var(--text-secondary); font-size: 12px;">Multi-factor asset evaluation and Groq LLM memorandum synthesis.</p>
+                    </div>
+                    <button class="btn-primary" onclick="generateReport()" id="generateBtn" style="padding: 9px 18px; font-size: 13px;">Generate Tactical Report</button>
+                </div>
+            </div>
+
+            <!-- Report Output -->
+            <div id="reportOutput" style="display:none; margin-bottom: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h2 style="font-size: 16px;">Executive Quant Memorandum</h2>
+                    <button class="btn-secondary" onclick="window.print()">Print / Export PDF</button>
+                </div>
+                <div id="reportContent" class="card report-content"></div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="reportLoading" class="card" style="display:none; text-align:center; padding: 40px 24px;">
+                <div class="spinner" style="margin: 0 auto 14px;"></div>
+                <div id="progressPercent" class="tabular" style="font-size: 24px; font-weight: 700; color: var(--accent); margin-bottom: 4px;">0%</div>
+                <div id="progressStage" style="font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px;">Stage 1: Fetching Market Data</div>
+                <div id="scanningConsole" style="max-width: 480px; margin: 0 auto; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; color: var(--text-secondary); text-align: left; max-height: 80px; overflow: hidden;">
+                    <div>[SYSTEM] Pipeline initialized...</div>
+                </div>
+                <div style="display:none;">
+                    <div id="progressRing"></div>
+                    <div id="ghostBars"></div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- ========== MAIN: USER ACCOUNT DASHBOARD ========== -->
+        <main class="main-content account-page" id="pageAccount" style="display:none;">
+            <!-- Account Page Header -->
+            <div class="account-header">
                 <div>
-                    <h3>🚀 Generate Tactical Report</h3>
-                    <p style="color:var(--text-secondary); font-size:13px;">The QuantCore Research Engine will analyze your stocks against institutional-grade parameters to generate a structured tactical advisory report.</p>
+                    <h1>User Account Dashboard</h1>
+                    <p class="account-sub">Telemetry, investment parameters, and persistent account controls for <span id="accountHeaderUser" style="font-weight: 600; color: var(--text-primary);">User</span></p>
                 </div>
-                <button class="generate-btn" onclick="generateReport()" id="generateBtn">Generate Tactical Report</button>
-            </div>
-        </div>
-
-        <!-- Report Output -->
-        <div class="panel report-output" id="reportOutput" style="display:none; margin-top:24px;">
-            <div class="report-header-bar">
-                <h3>📄 Your Personalized Report</h3>
-                <button class="btn-outline" onclick="window.print()" style="padding: 6px 14px; font-size:12px;">🖨️ Print / Save PDF</button>
-            </div>
-            <div id="reportContent" class="report-content"></div>
-        </div>
-
-        <!-- Report Loading -->
-        <div id="reportLoading" class="report-loading-container" style="display:none; text-align:center;">
-            <div class="financial-grid"></div>
-            <div class="candlestick-ghost-container" id="ghostBars">
-                <!-- Injected via JS -->
-            </div>
-            
-            <div class="progress-ring-wrapper" style="width: 120px; height: 120px; margin: 0 auto 30px;">
-                <div class="laser-sweep"></div>
-                <svg class="progress-ring" width="120" height="120">
-                    <circle class="ring-bg" cx="60" cy="60" r="55"></circle>
-                    <circle class="ring-fill" id="progressRing" cx="60" cy="60" r="55"></circle>
-                </svg>
-                <div id="progressPercent" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; font-weight: 800; color: white;">0%</div>
+                <button class="btn-secondary" onclick="handleLogout()" style="color: var(--danger);">Sign out</button>
             </div>
 
-            <div id="progressStage" style="font-size: 14px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; position: relative; z-index: 5;">Phase 1: Market Data Fetch</div>
-            <p id="progressSubtitle" style="color: var(--text-secondary); font-size: 13px; position: relative; z-index: 5;">QuantCore Intelligence is processing your analysis...</p>
-            
-            <div class="scanning-console" id="scanningConsole">
-                <div class="console-line">[SYSTEM] Initializing Quant Pipeline...</div>
+            <!-- User Hero Profile Card -->
+            <div class="card account-hero-card">
+                <div class="account-hero-left">
+                    <div class="account-large-avatar" id="accountHeroAvatar">U</div>
+                    <div class="account-hero-info">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h2 id="accountHeroUsername" style="font-size: 18px; margin: 0;">User</h2>
+                            <span class="user-tier-pill">Institutional Tier</span>
+                        </div>
+                        <span style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">QuantCore Terminal User ID: <span id="accountHeroId">#1</span></span>
+                    </div>
+                </div>
+                <div class="account-hero-kpis">
+                    <div class="account-kpi-item">
+                        <span class="kpi-label">Tracked Assets</span>
+                        <strong class="kpi-val tabular" id="accountKpiAssets">0</strong>
+                    </div>
+                    <div class="account-kpi-item">
+                        <span class="kpi-label">Risk Tolerance</span>
+                        <strong class="kpi-val" id="accountKpiRisk">Medium</strong>
+                    </div>
+                    <div class="account-kpi-item">
+                        <span class="kpi-label">Horizon</span>
+                        <strong class="kpi-val" id="accountKpiHorizon">Long-term</strong>
+                    </div>
+                </div>
             </div>
-        </div>
-    </main>
+
+            <!-- Two-Column Grid for Account Controls -->
+            <div class="advisory-grid account-grid">
+                <!-- Column 1: Investment Parameters -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Investment Profile & Strategy Parameters</span>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+                        These parameters are stored in your user database record and guide QuantCore LLM reasoning and asset allocation.
+                    </p>
+                    <div class="pref-group">
+                        <label>Risk tolerance</label>
+                        <div class="pill-group" id="accountRiskGroup">
+                            <button class="pill" data-value="Low">Conservative</button>
+                            <button class="pill active" data-value="Medium">Moderate</button>
+                            <button class="pill" data-value="High">Aggressive</button>
+                        </div>
+                    </div>
+                    <div class="pref-group">
+                        <label>Investment horizon</label>
+                        <div class="pill-group" id="accountInvestGroup">
+                            <button class="pill" data-value="Short-term">Tactical (Short-term)</button>
+                            <button class="pill active" data-value="Long-term">Strategic (Long-term)</button>
+                        </div>
+                    </div>
+                    <div class="pref-group">
+                        <label>Analysis weighting</label>
+                        <div class="pill-group" id="accountFocusGroup">
+                            <button class="pill active" data-value="Technical">Quantitative technical</button>
+                            <button class="pill" data-value="Fundamental">Fundamental valuation</button>
+                            <button class="pill" data-value="Sentiment">Market sentiment</button>
+                        </div>
+                    </div>
+                    <div class="pref-group">
+                        <label>Portfolio budget (optional)</label>
+                        <input type="text" id="accountBudgetInput" class="auth-input" placeholder="e.g. $50,000" style="margin-bottom: 0;">
+                    </div>
+                    <div class="pref-group">
+                        <label>Target annual return (optional)</label>
+                        <input type="text" id="accountReturnInput" class="auth-input" placeholder="e.g. 18%" style="margin-bottom: 0;">
+                    </div>
+                    <button class="btn-primary" id="saveAccountPrefsBtn" style="margin-top: 14px; width: 100%;" onclick="saveAccountPreferences()">Save Account Parameters</button>
+                    <div id="accountPrefSavedMsg" style="display:none; color: var(--success); font-size: 11px; text-align: center; margin-top: 8px;">Parameters saved successfully to your account.</div>
+                </div>
+
+                <!-- Column 2: Saved Watchlist & Quick Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Saved Watchlist Assets (<span id="accountWlCountBadge">0</span>)</span>
+                        <button class="btn-secondary" onclick="showPage('advisory')" style="font-size: 11px; padding: 2px 8px;">Synthesize Report</button>
+                    </div>
+                    <label>Add new asset to your dashboard</label>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="text" id="accountAddTickerInput" list="popularTickers" class="auth-input" placeholder="Enter ticker (e.g. AAPL, NVDA)" style="margin-bottom: 0; text-transform: uppercase;">
+                        <button class="btn-primary" id="accountAddTickerBtn" onclick="addAccountWatchlistStock()">+ Add</button>
+                    </div>
+                    <ul id="accountWatchlistList" class="account-wl-list">
+                        <!-- Populated dynamically via app.js -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Row 2: Security & Session Telemetry -->
+            <div class="advisory-grid" style="margin-top: 20px;">
+                <!-- Security Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Security & Credentials</span>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">Update your account password</p>
+                    <div class="pref-group">
+                        <label for="currentPasswordInput">Current Password</label>
+                        <input type="password" id="currentPasswordInput" class="auth-input" placeholder="Enter current password" autocomplete="current-password" style="margin-bottom: 10px;">
+                    </div>
+                    <div class="pref-group">
+                        <label for="newPasswordInput">New Password</label>
+                        <input type="password" id="newPasswordInput" class="auth-input" placeholder="Minimum 8 characters" autocomplete="new-password" style="margin-bottom: 10px;">
+                    </div>
+                    <button class="btn-secondary" style="width: 100%;" onclick="handleAccountChangePassword()">Update Password</button>
+                    <div id="accountPwdMsg" style="display:none; font-size: 11px; text-align: center; margin-top: 8px;"></div>
+                </div>
+
+                <!-- Session & Telemetry Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Account Telemetry & System Specs</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                        <div class="telemetry-row">
+                            <span class="telemetry-label">Session Status</span>
+                            <span class="telemetry-val" style="color: var(--success); font-weight: 600;">● Active (JWT Bearer)</span>
+                        </div>
+                        <div class="telemetry-row">
+                            <span class="telemetry-label">Rate Limit</span>
+                            <span class="telemetry-val tabular">20 requests / min</span>
+                        </div>
+                        <div class="telemetry-row">
+                            <span class="telemetry-label">Analysis Pipeline</span>
+                            <span class="telemetry-val">QuantCore 3.0 Institutional</span>
+                        </div>
+                        <div class="telemetry-row">
+                            <span class="telemetry-label">Data Providers</span>
+                            <span class="telemetry-val">Yahoo Finance + Real-Time Engine</span>
+                        </div>
+                        <div class="telemetry-row">
+                            <span class="telemetry-label">Storage Backend</span>
+                            <span class="telemetry-val">SQLite / PostgreSQL ORM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
 </div>
 
+<!-- Mobile Bottom Tab Bar (Under 768px) -->
+<nav class="mobile-bottom-tabs" id="mobileBottomTabs">
+    <button class="mobile-tab-btn active" id="mobileTabTerminal" onclick="showPage('dashboard')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m7 8 4 4-4 4"/><path d="M13 16h4"/></svg>
+        <span>Terminal</span>
+    </button>
+    <button class="mobile-tab-btn" id="mobileTabAdvisory" onclick="showPage('advisory')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Advisory</span>
+    </button>
+    <button class="mobile-tab-btn" id="mobileTabWatchlist" onclick="scrollToWatchlist()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span>Watchlist</span>
+    </button>
+    <button class="mobile-tab-btn" id="mobileTabAccount" onclick="showPage('account')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+        <span>Account</span>
+    </button>
+</nav>
+
+<!-- Global Loading Overlay -->
 <div id="loadingOverlay" class="loading-overlay" style="display: none;">
     <div class="spinner"></div>
-    <p style="margin-top: 15px; font-weight: 600; letter-spacing: 1px; color: var(--accent);">Synthesizing Tactical Market Data with QuantCore...</p>
+    <p>Synthesizing market intelligence...</p>
 </div>
 
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=9"></script>
 </body>
 </html>

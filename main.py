@@ -64,7 +64,7 @@ os.makedirs("static", exist_ok=True)
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def serve_frontend():
     index_file = os.path.join("static", "index.html")
     if os.path.exists(index_file):

@@ -12,6 +12,7 @@ import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -72,6 +73,7 @@ def _build_report_chain(model: str = PRIMARY_MODEL):
             "(6) Sentiment score is -1.0 to 1.0 — map to 0-100 for score_breakdown (0.0=50, -1.0=0, 1.0=100). "
             "(7) final_score must be a weighted composite: Technical 45% + Fundamental 35% + Sentiment 20%. "
             "(8) confidence_score must reflect signal agreement and data completeness, not just sentiment. "
+            "(9) Do not claim that a win rate below 50% implies negative expected value; expected value also depends on average win vs average loss. Do not state conclusions about statistical significance. "
             "Output structured JSON only.\n\n"
             "{format_instructions}"
         )),
@@ -87,11 +89,11 @@ def _build_report_chain(model: str = PRIMARY_MODEL):
             "2. **Final Score**: 0-100 based on weighted Technical, Fundamental, and Sentiment data.\n\n"
             "=== REPORT STRUCTURE INSTRUCTIONS ===\n"
             "1. **Market Overview**: 2-3 direct, data-backed sentences.\n"
-            "2. **Stock Comparison Table**: Markdown pipe table: Ticker | Score | Accuracy | Rec | Key Signal.\n"
+            "2. **Stock Comparison Table**: Markdown pipe table: Ticker | Score | Backtest win rate | Rec | Key Signal.\n"
             "3. **Top Picks**: Justify using raw numbers from data.\n"
             "4. **Strategy Backtest**: Reference the 1-year statistical accuracy for the tickers.\n"
             "5. **Decision Change Triggers**: Explicitly list data points for upgrades/downgrades.\n\n"
-            "Use **bolding** for all key metrics. Be direct. Be precise."
+            "Use bolding only for tickers and final conclusions. Do not bold every number. Be direct. Be precise."
         )),
     ])
 
@@ -209,6 +211,9 @@ def generate_user_report(db: Session, current_user: User) -> dict:
                 "format_instructions": parser.get_format_instructions(),
             })
             # result is already a dict per ReportOutput schema
+            result["model"] = model_candidate
+            result["tickers"] = [s.get("ticker") for s in stock_analysis_data if s.get("ticker")]
+            result["generated_at"] = datetime.now().strftime("%I:%M %p").lstrip("0")
             return result
         except Exception as e:
             logger.warning(f"[Report] Structured synthesis failed with {model_candidate}: {e}")

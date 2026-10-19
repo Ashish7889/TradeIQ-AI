@@ -34,7 +34,7 @@ def signup(request: Request, user: schemas.UserCreate, db: Session = Depends(get
     access_token = security.create_access_token(
         data={"sub": new_user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "username": new_user.username}
 
 @router.post("/login", response_model=schemas.Token)
 @limiter.limit("5/minute")
@@ -50,4 +50,5 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     access_token = security.create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "username": user.username}
+

@@ -9,16 +9,150 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+// ========== FORMATTING HELPERS ==========
+const priceFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+});
+
+function fmtPrice(val) {
+    if (val == null || isNaN(val)) return "—";
+    return priceFormatter.format(Number(val));
+}
+
+function fmtChange(pct) {
+    if (pct == null || isNaN(pct)) {
+        return { text: "—", className: "neutral", sign: "" };
+    }
+    const num = Number(pct);
+    const isUp = num >= 0;
+    return {
+        text: `${isUp ? "+" : ""}${num.toFixed(2)}%`,
+        className: isUp ? "up" : "down",
+        sign: isUp ? "+" : ""
+    };
+}
+
 // ========== STATE ==========
 let chart = null;
 let backtestChart = null;
 let currentTicker = "";
 let activeAlerts = [];
-let authToken = localStorage.getItem("ss_token") || null;
-let currentUser = localStorage.getItem("ss_user") || null;
+let currentChartType = "area";
+let currentPriceHistory = [];
+let authToken = null;
+let currentUser = null;
+let currentTheme = "light";
+
+try {
+    authToken = localStorage.getItem("ss_token") || null;
+    currentUser = localStorage.getItem("ss_user") || null;
+    currentTheme = localStorage.getItem("tradeiq_theme") || "light";
+} catch (e) {
+    currentTheme = "light";
+}
+
+const COMPANY_NAMES = {
+    "AAPL": "Apple Inc.",
+    "MSFT": "Microsoft Corporation",
+    "NVDA": "NVIDIA Corporation",
+    "TSLA": "Tesla, Inc.",
+    "AMZN": "Amazon.com, Inc.",
+    "GOOGL": "Alphabet Inc.",
+    "META": "Meta Platforms, Inc.",
+    "AMD": "Advanced Micro Devices",
+    "PLTR": "Palantir Technologies",
+    "NFLX": "Netflix, Inc.",
+    "SPY": "SPDR S&P 500 ETF Trust",
+    "QQQ": "Invesco QQQ Trust",
+    "BTC-USD": "Bitcoin USD"
+};
+
+function getCompanyName(ticker) {
+    return COMPANY_NAMES[ticker] || `${ticker} Corporation`;
+}
+
+function getAvatarColor(char) {
+    const colors = [
+        { bg: "#eef2ff", text: "#4f46e5" }, // Indigo
+        { bg: "#ecfdf5", text: "#059669" }, // Emerald
+        { bg: "#f0fdf4", text: "#16a34a" }, // Green
+        { bg: "#eff6ff", text: "#2563eb" }, // Blue
+        { bg: "#faf5ff", text: "#7c3aed" }, // Purple
+        { bg: "#fff7ed", text: "#ea580c" }  // Orange
+    ];
+    const code = (char || "A").charCodeAt(0);
+    return colors[code % colors.length];
+}
+
+// ========== THEME MANAGEMENT (Default Light, Dark Toggle) ==========
+function applyTheme(theme) {
+    currentTheme = theme;
+    try {
+        localStorage.setItem("tradeiq_theme", theme);
+    } catch (e) {
+        console.warn("localStorage write failed:", e);
+    }
+    document.documentElement.setAttribute("data-theme", theme);
+
+    const sunIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`;
+    const moonIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+
+    const btn1 = document.getElementById("themeToggleBtn");
+    const btn2 = document.getElementById("mobileThemeToggleBtn");
+    if (btn1) btn1.innerHTML = theme === "dark" ? sunIcon : moonIcon;
+    if (btn2) btn2.innerHTML = theme === "dark" ? sunIcon : moonIcon;
+
+    if (chart && chart.w && chart.w.config) {
+        chart.updateOptions({
+            theme: { mode: theme },
+            grid: { borderColor: theme === "dark" ? "rgba(255, 255, 255, 0.07)" : "#e5e7eb" }
+        });
+    }
+}
+
+function toggleTheme() {
+    applyTheme(currentTheme === "dark" ? "light" : "dark");
+}
+
+function toggleSidebarCollapse() {
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) sidebar.classList.toggle("collapsed");
+}
+
+function scrollToWatchlist() {
+    showPage('dashboard');
+    const el = document.getElementById("watchlistFullCard");
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function toggleAccountMenu() {
+    const userBar = document.getElementById("userInfoBar");
+    if (userBar) userBar.scrollIntoView({ behavior: 'smooth' });
+}
+
+function toggleSummaryClamp() {
+    const el = document.getElementById("explanationText");
+    const btn = document.getElementById("readMoreBtn");
+    if (!el || !btn) return;
+    const isClamped = el.classList.toggle("clamped");
+    btn.innerText = isClamped ? "Read more" : "Read less";
+}
 
 // ========== INIT ==========
 document.addEventListener("DOMContentLoaded", () => {
+    applyTheme(currentTheme);
+
+    const themeBtn = document.getElementById("themeToggleBtn");
+    if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
+    const mobileThemeBtn = document.getElementById("mobileThemeToggleBtn");
+    if (mobileThemeBtn) mobileThemeBtn.addEventListener("click", toggleTheme);
+
+    const collapseBtn = document.getElementById("sidebarCollapseBtn");
+    if (collapseBtn) collapseBtn.addEventListener("click", toggleSidebarCollapse);
+
     if (authToken && currentUser) {
         showApp();
     } else {
@@ -59,7 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const pdfBtn = document.getElementById("exportPdfBtn");
     if (pdfBtn) pdfBtn.addEventListener("click", () => window.print());
 
-    // Timeframe buttons
+    // Timeframe buttons (1W / 1M / 3M / 6M / 1Y)
     document.querySelectorAll(".timeframe-filters button").forEach(btn => {
         btn.addEventListener("click", (e) => {
             document.querySelectorAll(".timeframe-filters button").forEach(b => b.classList.remove("active"));
@@ -68,10 +202,37 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+    // Setup ResizeObserver for responsive chart (Item 7)
+    const chartBox = document.getElementById("chartContainer");
+    if (chartBox && window.ResizeObserver) {
+        const ro = new ResizeObserver(() => {
+            if (chart && typeof chart.resize === "function") {
+                chart.resize();
+            }
+        });
+        ro.observe(chartBox);
+    }
+
     // Pill group selectors
     setupPillGroup("riskGroup");
     setupPillGroup("investGroup");
     setupPillGroup("focusGroup");
+
+    // Account Dashboard Pill group selectors
+    setupPillGroup("accountRiskGroup");
+    setupPillGroup("accountInvestGroup");
+    setupPillGroup("accountFocusGroup");
+
+    // Account Add Ticker Enter key
+    const accTickerInput = document.getElementById("accountAddTickerInput");
+    if (accTickerInput) {
+        accTickerInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                addAccountWatchlistStock();
+            }
+        });
+    }
 
     // Alert check loop
     setInterval(checkAlerts, 10000);
@@ -94,15 +255,48 @@ function showAuthModal() {
     document.getElementById("appContainer").style.display = "none";
 }
 
+function updateUserDisplays(username) {
+    if (!username || username === "undefined") username = "User";
+    currentUser = username;
+    try {
+        localStorage.setItem("ss_user", username);
+    } catch (e) {}
+
+    const userDisplay = document.getElementById("userDisplayName");
+    if (userDisplay) userDisplay.innerText = username;
+
+    const av = document.getElementById("userAvatar");
+    if (av) {
+        av.innerText = username.charAt(0).toUpperCase();
+        const avColor = getAvatarColor(username.charAt(0));
+        av.style.backgroundColor = avColor.bg;
+        av.style.color = avColor.text;
+    }
+
+    const headerEl = document.getElementById("accountHeaderUser");
+    if (headerEl) headerEl.innerText = username;
+
+    const heroUserEl = document.getElementById("accountHeroUsername");
+    if (heroUserEl) heroUserEl.innerText = username;
+
+    const heroAv = document.getElementById("accountHeroAvatar");
+    if (heroAv) {
+        heroAv.innerText = username.charAt(0).toUpperCase();
+        const avColor = getAvatarColor(username.charAt(0));
+        heroAv.style.backgroundColor = avColor.bg;
+        heroAv.style.color = avColor.text;
+    }
+}
+
 function showApp() {
     document.getElementById("authModal").style.display = "none";
     document.getElementById("appContainer").style.display = "flex";
-    document.getElementById("userDisplayName").innerText = currentUser || "User";
-    const av = document.getElementById("userAvatar");
-    if (av && currentUser) av.innerText = currentUser[0].toUpperCase();
+    updateUserDisplays(currentUser || "User");
+
     loadWatchlist();
-    loadAdvisoryWatchlist();
     loadPreferences();
+    loadAdvisoryWatchlist();
+    loadAccountDashboard();
 }
 
 function switchTab(tab) {
@@ -116,32 +310,42 @@ function switchTab(tab) {
 async function handleLogin() {
     const username = document.getElementById("loginUsername").value.trim();
     const password = document.getElementById("loginPassword").value;
-    if (!username || !password) return showAuthError("Please fill in all fields.");
-
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("password", password);
-
+    if (!username || !password) {
+        showAuthError("Please provide both username and password.");
+        return;
+    }
     try {
-        const res = await fetch("/api/auth/login", { method: "POST", body: formData });
+        const formData = new URLSearchParams();
+        formData.append("username", username);
+        formData.append("password", password);
+
+        const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: formData.toString()
+        });
         const data = await res.json();
-        if (!res.ok) return showAuthError(data.detail || "Login failed.");
-        authToken = data.access_token;
-        currentUser = username;
-        localStorage.setItem("ss_token", authToken);
-        localStorage.setItem("ss_user", currentUser);
-        showApp();
+        if (!res.ok) {
+            showAuthError(data.detail || "Authentication failed.");
+            return;
+        }
+        setAuth(data.access_token, data.username || username);
     } catch (e) {
-        showAuthError("Network error. Is the server running?");
+        showAuthError("Network error. Please try again.");
     }
 }
 
 async function handleSignup() {
     const username = document.getElementById("signupUsername").value.trim();
     const password = document.getElementById("signupPassword").value;
-    if (!username || !password) return showAuthError("Please fill in all fields.");
-    if (password.length < 8) return showAuthError("Password must be at least 8 characters.");
-
+    if (!username || !password) {
+        showAuthError("Please provide username and password.");
+        return;
+    }
+    if (password.length < 8) {
+        showAuthError("Password must be at least 8 characters long.");
+        return;
+    }
     try {
         const res = await fetch("/api/auth/signup", {
             method: "POST",
@@ -149,93 +353,403 @@ async function handleSignup() {
             body: JSON.stringify({ username, password })
         });
         const data = await res.json();
-        if (!res.ok) return showAuthError(data.detail || "Signup failed.");
-        authToken = data.access_token;
-        currentUser = username;
-        localStorage.setItem("ss_token", authToken);
-        localStorage.setItem("ss_user", currentUser);
-        showApp();
+        if (!res.ok) {
+            showAuthError(data.detail || "Registration failed.");
+            return;
+        }
+        const formData = new URLSearchParams();
+        formData.append("username", username);
+        formData.append("password", password);
+        const loginRes = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: formData.toString()
+        });
+        const loginData = await loginRes.json();
+        if (loginRes.ok) {
+            setAuth(loginData.access_token, loginData.username || username);
+        } else {
+            switchTab("login");
+            showAuthError("Registration complete. Please sign in.");
+        }
     } catch (e) {
-        showAuthError("Network error. Is the server running?");
+        showAuthError("Network error. Please try again.");
     }
-}
-
-function handleLogout() {
-    authToken = null;
-    currentUser = null;
-    localStorage.removeItem("ss_token");
-    localStorage.removeItem("ss_user");
-    showAuthModal();
 }
 
 function showAuthError(msg) {
     document.getElementById("authError").innerText = msg;
 }
 
-function authHeaders() {
-    return { "Authorization": `Bearer ${authToken}`, "Content-Type": "application/json" };
+function setAuth(token, username) {
+    authToken = token;
+    currentUser = username;
+    try {
+        localStorage.setItem("ss_token", token);
+        localStorage.setItem("ss_user", username);
+    } catch (e) {}
+    updateUserDisplays(username);
+    showApp();
 }
 
-/**
- * Handles 401 Unauthorized responses across all API calls.
- * Clears the expired token and sends the user back to the login screen.
- */
-function handleAuthError() {
+
+function handleLogout() {
     authToken = null;
     currentUser = null;
-    localStorage.removeItem("ss_token");
-    localStorage.removeItem("ss_user");
-    document.getElementById("authError").innerText = "Your session has expired. Please log in again.";
+    try {
+        localStorage.removeItem("ss_token");
+        localStorage.removeItem("ss_user");
+    } catch (e) {}
     showAuthModal();
 }
 
-// ========== PAGE NAV ==========
+function handleAuthError() {
+    handleLogout();
+    showAuthError("Your session has expired. Please sign in again.");
+}
+
+function authHeaders() {
+    return {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+    };
+}
+
+// ========== NAVIGATION ==========
 function showPage(page) {
-    document.getElementById("pageDashboard").style.display = page === "dashboard" ? "block" : "none";
-    document.getElementById("pageAdvisory").style.display = page === "advisory" ? "block" : "none";
-    document.querySelectorAll(".nav-btn").forEach((b, i) => {
-        b.classList.toggle("active", (page === "dashboard" && i === 0) || (page === "advisory" && i === 1));
-    });
-    if (page === "advisory") {
-        loadAdvisoryWatchlist();
-        loadPreferences();
+    const pageDash = document.getElementById("pageDashboard");
+    const pageAdv = document.getElementById("pageAdvisory");
+    const pageAcc = document.getElementById("pageAccount");
+    if (pageDash) pageDash.style.display = page === "dashboard" ? "block" : "none";
+    if (pageAdv) pageAdv.style.display = page === "advisory" ? "block" : "none";
+    if (pageAcc) pageAcc.style.display = page === "account" ? "block" : "none";
+
+    const navDash = document.getElementById("navTerminalBtn");
+    const navAdv = document.getElementById("navAdvisoryBtn");
+    const navAcc = document.getElementById("navAccountBtn");
+    if (navDash) navDash.classList.toggle("active", page === "dashboard");
+    if (navAdv) navAdv.classList.toggle("active", page === "advisory");
+    if (navAcc) navAcc.classList.toggle("active", page === "account");
+
+    const mobDash = document.getElementById("mobileTabTerminal");
+    const mobAdv = document.getElementById("mobileTabAdvisory");
+    const mobAcc = document.getElementById("mobileTabAccount");
+    if (mobDash) mobDash.classList.toggle("active", page === "dashboard");
+    if (mobAdv) mobAdv.classList.toggle("active", page === "advisory");
+    if (mobAcc) mobAcc.classList.toggle("active", page === "account");
+
+    if (page === "account") {
+        loadAccountDashboard();
     }
 }
 
-// ========== PREFERENCES ==========
+// ========== USER ACCOUNT DASHBOARD ==========
+async function loadAccountDashboard() {
+    if (!authToken) return;
+    try {
+        const res = await fetch("/api/user/profile", { headers: authHeaders() });
+        if (res.status === 401) { handleAuthError(); return; }
+        if (!res.ok) return;
+        const profile = await res.json();
+
+        // 1. User Header, Hero, and Sidebar sync
+        const username = profile.username || currentUser || "User";
+        updateUserDisplays(username);
+        const heroIdEl = document.getElementById("accountHeroId");
+        if (heroIdEl) heroIdEl.innerText = `#${profile.id}`;
+
+
+        // 2. KPIs
+        const kpiAssets = document.getElementById("accountKpiAssets");
+        if (kpiAssets) kpiAssets.innerText = profile.watchlist_count || 0;
+        const wlBadge = document.getElementById("accountWlCountBadge");
+        if (wlBadge) wlBadge.innerText = profile.watchlist_count || 0;
+
+        const prefs = profile.preferences || {};
+        const kpiRisk = document.getElementById("accountKpiRisk");
+        if (kpiRisk) kpiRisk.innerText = prefs.risk_level || "Medium";
+        const kpiHorizon = document.getElementById("accountKpiHorizon");
+        if (kpiHorizon) kpiHorizon.innerText = prefs.investment_type || "Long-term";
+
+        // 3. Preference controls
+        if (prefs.risk_level) setPillValue("accountRiskGroup", prefs.risk_level);
+        if (prefs.investment_type) setPillValue("accountInvestGroup", prefs.investment_type);
+        if (prefs.focus_type) setPillValue("accountFocusGroup", prefs.focus_type);
+        if (prefs.budget_range) document.getElementById("accountBudgetInput").value = prefs.budget_range;
+        if (prefs.expected_return) document.getElementById("accountReturnInput").value = prefs.expected_return;
+
+        // 4. Render Saved Watchlist in Account Dashboard
+        renderAccountWatchlist();
+
+    } catch (e) {
+        console.error("Failed to load account dashboard", e);
+    }
+}
+
+async function renderAccountWatchlist() {
+    try {
+        const res = await fetch("/api/watchlist", { headers: authHeaders() });
+        if (!res.ok) return;
+        const items = await res.json();
+        const listEl = document.getElementById("accountWatchlistList");
+        if (!listEl) return;
+        listEl.innerHTML = "";
+
+        if (!items || items.length === 0) {
+            listEl.innerHTML = `<li style="font-size: 12px; color: var(--text-muted); padding: 12px 0; text-align: center;">No assets in your account watchlist yet. Add one above!</li>`;
+            return;
+        }
+
+        items.forEach(item => {
+            const li = document.createElement("li");
+            li.className = "account-wl-item";
+
+            const leftDiv = document.createElement("div");
+            leftDiv.className = "account-wl-left";
+
+            const av = document.createElement("div");
+            av.className = "letter-avatar";
+            const avColor = getAvatarColor(item.ticker[0]);
+            av.style.backgroundColor = avColor.bg;
+            av.style.color = avColor.text;
+            av.textContent = (item.ticker[0] || "A").toUpperCase();
+
+            const metaDiv = document.createElement("div");
+            metaDiv.className = "account-wl-meta";
+
+            const tickerSpan = document.createElement("span");
+            tickerSpan.className = "account-wl-ticker";
+            tickerSpan.textContent = item.ticker;
+
+            const companySpan = document.createElement("span");
+            companySpan.className = "account-wl-company";
+            companySpan.textContent = getCompanyName(item.ticker);
+
+            metaDiv.appendChild(tickerSpan);
+            metaDiv.appendChild(companySpan);
+
+            leftDiv.appendChild(av);
+            leftDiv.appendChild(metaDiv);
+
+            const rightDiv = document.createElement("div");
+            rightDiv.className = "account-wl-right";
+
+            const priceSpan = document.createElement("span");
+            priceSpan.className = "tabular";
+            priceSpan.style.fontWeight = "600";
+            priceSpan.textContent = item.price ? fmtPrice(item.price) : "—";
+
+            const changeInfo = fmtChange(item.change_pct);
+            const changePill = document.createElement("span");
+            changePill.className = `price-change-pill ${changeInfo.className}`;
+            changePill.textContent = changeInfo.text;
+
+            const analyzeBtn = document.createElement("button");
+            analyzeBtn.className = "account-wl-action-btn";
+            analyzeBtn.textContent = "Analyze";
+            analyzeBtn.title = `Analyze ${item.ticker} in Terminal`;
+            analyzeBtn.addEventListener("click", () => {
+                showPage('dashboard');
+                const searchInput = document.getElementById("searchInput");
+                if (searchInput) searchInput.value = item.ticker;
+                handleSearch(item.ticker);
+            });
+
+            const removeBtn = document.createElement("button");
+            removeBtn.className = "remove-btn";
+            removeBtn.title = `Remove ${item.ticker}`;
+            removeBtn.textContent = "✕";
+            removeBtn.addEventListener("click", async () => {
+                await removeAdvisoryStock(item.ticker);
+                loadAccountDashboard();
+            });
+
+            rightDiv.appendChild(priceSpan);
+            rightDiv.appendChild(changePill);
+            rightDiv.appendChild(analyzeBtn);
+            rightDiv.appendChild(removeBtn);
+
+            li.appendChild(leftDiv);
+            li.appendChild(rightDiv);
+            listEl.appendChild(li);
+        });
+    } catch (e) {
+        console.error("Failed to render account watchlist", e);
+    }
+}
+
+async function addAccountWatchlistStock() {
+    const input = document.getElementById("accountAddTickerInput");
+    if (!input) return;
+    const ticker = input.value.trim().toUpperCase();
+    if (!ticker) return;
+
+    if (!/^[A-Z0-9.\-]{1,10}$/.test(ticker)) {
+        alert("Invalid ticker format. Please enter 1-10 uppercase alphanumeric characters.");
+        return;
+    }
+
+    const btn = document.getElementById("accountAddTickerBtn");
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch("/api/watchlist/add", {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({ ticker })
+        });
+        if (res.status === 401) { handleAuthError(); return; }
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || "Could not add ticker.");
+            return;
+        }
+        input.value = "";
+        await loadWatchlist();
+        await loadAdvisoryWatchlist();
+        await loadAccountDashboard();
+    } catch (e) {
+        console.error("Failed to add account stock", e);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function saveAccountPreferences() {
+    const payload = {
+        risk_level: getPillValue("accountRiskGroup"),
+        investment_type: getPillValue("accountInvestGroup"),
+        focus_type: getPillValue("accountFocusGroup"),
+        budget_range: document.getElementById("accountBudgetInput").value || null,
+        expected_return: document.getElementById("accountReturnInput").value || null
+    };
+
+    try {
+        const res = await fetch("/api/preferences", {
+            method: "PUT",
+            headers: authHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.status === 401) { handleAuthError(); return; }
+        if (res.ok) {
+            // Sync with Advisory page
+            setPillValue("riskGroup", payload.risk_level);
+            setPillValue("investGroup", payload.investment_type);
+            setPillValue("focusGroup", payload.focus_type);
+            const advBudget = document.getElementById("budgetInput");
+            if (advBudget) advBudget.value = payload.budget_range || "";
+            const advReturn = document.getElementById("returnInput");
+            if (advReturn) advReturn.value = payload.expected_return || "";
+
+            const kpiRisk = document.getElementById("accountKpiRisk");
+            if (kpiRisk) kpiRisk.innerText = payload.risk_level || "Medium";
+            const kpiHorizon = document.getElementById("accountKpiHorizon");
+            if (kpiHorizon) kpiHorizon.innerText = payload.investment_type || "Long-term";
+
+            const msg = document.getElementById("accountPrefSavedMsg");
+            if (msg) {
+                msg.style.display = "block";
+                setTimeout(() => { msg.style.display = "none"; }, 3000);
+            }
+        }
+    } catch (e) {
+        console.error("Failed to save account preferences", e);
+    }
+}
+
+async function handleAccountChangePassword() {
+    const curPwd = document.getElementById("currentPasswordInput").value;
+    const newPwd = document.getElementById("newPasswordInput").value;
+    const msg = document.getElementById("accountPwdMsg");
+
+    if (!curPwd || !newPwd) {
+        if (msg) {
+            msg.style.display = "block";
+            msg.style.color = "var(--danger)";
+            msg.innerText = "Please provide both current and new password.";
+        }
+        return;
+    }
+    if (newPwd.length < 8) {
+        if (msg) {
+            msg.style.display = "block";
+            msg.style.color = "var(--danger)";
+            msg.innerText = "New password must be at least 8 characters long.";
+        }
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/user/change-password", {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({ current_password: curPwd, new_password: newPwd })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (msg) {
+                msg.style.display = "block";
+                msg.style.color = "var(--danger)";
+                msg.innerText = data.detail || "Password update failed.";
+            }
+            return;
+        }
+
+        if (msg) {
+            msg.style.display = "block";
+            msg.style.color = "var(--success)";
+            msg.innerText = "Password updated successfully.";
+            document.getElementById("currentPasswordInput").value = "";
+            document.getElementById("newPasswordInput").value = "";
+            setTimeout(() => { msg.style.display = "none"; }, 4000);
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.display = "block";
+            msg.style.color = "var(--danger)";
+            msg.innerText = "Network error. Please try again.";
+        }
+    }
+}
+
+
+// ========== ADVISORY PREFERENCES ==========
 async function loadPreferences() {
     try {
         const res = await fetch("/api/preferences", { headers: authHeaders() });
+        if (res.status === 401) { handleAuthError(); return; }
         if (!res.ok) return;
         const prefs = await res.json();
-        setPillActive("riskGroup", prefs.risk_level);
-        setPillActive("investGroup", prefs.investment_type);
-        setPillActive("focusGroup", prefs.focus_type);
+        if (prefs.risk_tolerance) setPillValue("riskGroup", prefs.risk_tolerance);
+        if (prefs.investment_horizon) setPillValue("investGroup", prefs.investment_horizon);
+        if (prefs.focus_area) setPillValue("focusGroup", prefs.focus_area);
         if (prefs.budget_range) document.getElementById("budgetInput").value = prefs.budget_range;
         if (prefs.expected_return) document.getElementById("returnInput").value = prefs.expected_return;
-    } catch (e) { console.error("Failed to load prefs", e); }
+    } catch (e) {
+        console.error("Failed to load preferences", e);
+    }
 }
 
-function setPillActive(groupId, value) {
+function setPillValue(groupId, value) {
     const group = document.getElementById(groupId);
     if (!group) return;
-    group.querySelectorAll(".pill").forEach(b => {
-        b.classList.toggle("active", b.getAttribute("data-value") === value);
+    group.querySelectorAll(".pill").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-value") === value);
     });
 }
 
 function getPillValue(groupId) {
     const group = document.getElementById(groupId);
-    if (!group) return null;
+    if (!group) return "";
     const active = group.querySelector(".pill.active");
-    return active ? active.getAttribute("data-value") : null;
+    return active ? active.getAttribute("data-value") : "";
 }
 
 async function savePreferences() {
-    const prefs = {
-        risk_level: getPillValue("riskGroup") || "Medium",
-        investment_type: getPillValue("investGroup") || "Long-term",
-        focus_type: getPillValue("focusGroup") || "Technical",
+    const payload = {
+        risk_tolerance: getPillValue("riskGroup"),
+        investment_horizon: getPillValue("investGroup"),
+        focus_area: getPillValue("focusGroup"),
         budget_range: document.getElementById("budgetInput").value || null,
         expected_return: document.getElementById("returnInput").value || null
     };
@@ -243,19 +757,22 @@ async function savePreferences() {
         const res = await fetch("/api/preferences", {
             method: "PUT",
             headers: authHeaders(),
-            body: JSON.stringify(prefs)
+            body: JSON.stringify(payload)
         });
+        if (res.status === 401) { handleAuthError(); return; }
         if (res.ok) {
             const msg = document.getElementById("prefSavedMsg");
             msg.style.display = "block";
-            setTimeout(() => msg.style.display = "none", 2500);
+            setTimeout(() => { msg.style.display = "none"; }, 3000);
         }
-    } catch (e) { console.error("Failed to save prefs", e); }
+    } catch (e) {
+        console.error("Failed to save preferences", e);
+    }
 }
 
 // ========== ADVISORY WATCHLIST ==========
 async function clearAdvisoryWatchlist() {
-    if (!confirm("Are you sure you want to clear your entire watchlist?")) return;
+    if (!confirm("Are you sure you want to clear your entire advisory basket?")) return;
     try {
         const res = await fetch("/api/watchlist", {
             method: "DELETE",
@@ -273,10 +790,7 @@ async function clearAdvisoryWatchlist() {
 async function loadAdvisoryWatchlist() {
     try {
         const res = await fetch("/api/watchlist", { headers: authHeaders() });
-        if (res.status === 401) {
-            handleAuthError();
-            return;
-        }
+        if (res.status === 401) { handleAuthError(); return; }
         if (!res.ok) return;
         const items = await res.json();
         renderAdvisoryWatchlist(items);
@@ -290,7 +804,7 @@ function renderAdvisoryWatchlist(items) {
     if (!ul) return;
     ul.innerHTML = "";
     if (!items || items.length === 0) {
-        ul.innerHTML = `<li class="empty-wl">No stocks in your report list yet. Type a ticker above or click a Quick Add chip!</li>`;
+        ul.innerHTML = `<li style="font-size: 12px; color: var(--text-muted); padding: 8px 0;">No candidate tickers added yet. Type a ticker above or click a Quick Add chip!</li>`;
         return;
     }
     items.forEach(item => {
@@ -298,15 +812,25 @@ function renderAdvisoryWatchlist(items) {
         li.className = "advisory-wl-item";
 
         const infoDiv = document.createElement("div");
-        infoDiv.className = "wl-info";
+        infoDiv.style.display = "flex";
+        infoDiv.style.alignItems = "center";
+        infoDiv.style.gap = "8px";
+
+        const av = document.createElement("div");
+        av.className = "letter-avatar";
+        const avColor = getAvatarColor(item.ticker[0]);
+        av.style.backgroundColor = avColor.bg;
+        av.style.color = avColor.text;
+        av.textContent = (item.ticker[0] || "A").toUpperCase();
 
         const strong = document.createElement("strong");
         strong.textContent = item.ticker;
 
         const span = document.createElement("span");
-        span.className = "wl-price";
-        span.textContent = item.price ? '$' + item.price : '...';
+        span.className = "wl-price tabular";
+        span.textContent = item.price ? fmtPrice(item.price) : "—";
 
+        infoDiv.appendChild(av);
         infoDiv.appendChild(strong);
         infoDiv.appendChild(span);
 
@@ -324,41 +848,37 @@ function renderAdvisoryWatchlist(items) {
 
 async function addAdvisoryStock(tickerOverride) {
     const input = document.getElementById("advisoryTicker");
-    const ticker = (tickerOverride || (input ? input.value : "")).trim().toUpperCase();
-    if (!ticker) {
-        if (input) {
-            input.focus();
-            input.classList.add("input-error");
-            input.placeholder = "Please enter a ticker (e.g. AAPL)...";
-            setTimeout(() => input.classList.remove("input-error"), 1500);
-        }
+    const rawVal = tickerOverride || (input ? input.value : "");
+    const ticker = rawVal.trim().toUpperCase();
+    if (!ticker) return;
+
+    if (!/^[A-Z0-9.\-]{1,10}$/.test(ticker)) {
+        alert("Invalid ticker format. Please enter 1-10 uppercase alphanumeric characters.");
         return;
     }
+
     const btn = document.getElementById("addAdvisoryStockBtn");
-    if (btn) {
-        btn.disabled = true;
-        btn.innerText = "Adding...";
-    }
+    if (btn) btn.disabled = true;
+
     try {
         const res = await fetch("/api/watchlist/add", {
             method: "POST",
             headers: authHeaders(),
             body: JSON.stringify({ ticker })
         });
-        if (res.status === 401) {
-            handleAuthError();
+        if (res.status === 401) { handleAuthError(); return; }
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || "Could not add ticker.");
             return;
         }
         if (input) input.value = "";
         await loadAdvisoryWatchlist();
-        await loadWatchlist(); // Also refresh sidebar watchlist
+        await loadWatchlist();
     } catch (e) {
-        console.error("Failed to add stock", e);
+        console.error("Failed to add advisory stock", e);
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerText = "+ Add Stock";
-        }
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -372,36 +892,36 @@ async function removeAdvisoryStock(ticker) {
             method: "DELETE",
             headers: authHeaders()
         });
-        if (res.status === 401) {
-            handleAuthError();
-            return;
-        }
-        if (res.ok) {
-            await loadAdvisoryWatchlist();
-            await loadWatchlist(); // also refresh sidebar
-        } else {
-            const data = await res.json();
-            console.error("Failed to remove stock:", data.detail);
-        }
+        if (res.status === 401) { handleAuthError(); return; }
+        await loadAdvisoryWatchlist();
+        await loadWatchlist();
     } catch (e) {
-        console.error("Error removing stock:", e);
+        console.error("Failed to remove advisory stock", e);
     }
 }
 
-// ========== GENERATE REPORT ==========
+// ========== AI REPORT GENERATION ==========
+let progressInterval = null;
+let consoleInterval = null;
+
+const PIPELINE_STAGES = [
+    { threshold: 0, text: "Stage 1: Ingesting Real-Time Market Data" },
+    { threshold: 20, text: "Stage 2: Calculating Moving Averages & Volatility" },
+    { threshold: 40, text: "Stage 3: Screening Fundamentals & Valuation Ratios" },
+    { threshold: 60, text: "Stage 4: Sentiment Mining & NLP Mood Analysis" },
+    { threshold: 80, text: "Stage 5: Strategy Simulation & Backtesting" },
+    { threshold: 90, text: "Stage 6: Synthesizing Executive Memorandum via LLM" }
+];
+
 async function generateReport() {
     const btn = document.getElementById("generateBtn");
     const loading = document.getElementById("reportLoading");
     const output = document.getElementById("reportOutput");
 
-    // Save prefs first
-    await savePreferences();
-
     btn.disabled = true;
-    btn.innerText = "Generating...";
     loading.style.display = "block";
     output.style.display = "none";
-    
+
     startProgressSimulation();
 
     try {
@@ -409,330 +929,357 @@ async function generateReport() {
             method: "POST",
             headers: authHeaders()
         });
-        const data = await res.json();
-        // 401 = expired/invalid token — send back to login
         if (res.status === 401) {
-            if (progressInterval) clearInterval(progressInterval);
-            if (consoleInterval) clearInterval(consoleInterval);
-            loading.style.display = "none";
             handleAuthError();
             return;
         }
-        if (!res.ok) throw new Error(data.detail || "Failed to generate report.");
-        
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.detail || "Report generation failed.");
+            return;
+        }
+
         stopProgressSimulation();
-        // Give a tiny delay for the 100% fill animation to show
-        setTimeout(() => {
-            displayReport(data);
-            loading.style.display = "none";
-        }, 600);
-        
+        renderExecutiveReport(data);
     } catch (e) {
-        if (progressInterval) clearInterval(progressInterval);
-        if (consoleInterval) clearInterval(consoleInterval);
-        alert("Error: " + e.message);
-        loading.style.display = "none";
+        console.error("Report generation failed", e);
+        stopProgressSimulation();
+        alert("An error occurred while generating the tactical report.");
     } finally {
         btn.disabled = false;
-        btn.innerText = "Generate Report";
+        loading.style.display = "none";
     }
 }
 
-function displayReport(data) {
+function renderExecutiveReport(data) {
     const output = document.getElementById("reportOutput");
     const content = document.getElementById("reportContent");
-    
-    // 1. Build the "Institutional Dashboard" Header (ONLY if data is present)
+    if (!content || !output) return;
+
+    // 1. Memo Header Meta (Item 4: "Generated <local time>", tickers covered, model name if returned)
+    const currentTimeStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const genTime = data.generated_at || currentTimeStr;
+
+    let tickersList = [];
+    if (Array.isArray(data.tickers) && data.tickers.length > 0) {
+        tickersList = data.tickers;
+    } else if (typeof data.tickers === "string" && data.tickers.trim()) {
+        tickersList = [data.tickers.trim()];
+    } else if (data.full_data && data.full_data.length > 0) {
+        tickersList = data.full_data.map(d => d.ticker).filter(Boolean);
+    } else if (data.portfolio_ticker) {
+        tickersList = [data.portfolio_ticker];
+    }
+    const tickersText = tickersList.join(", ");
+    const modelText = data.model ? escapeHtml(data.model) : "";
+
+    const headerMetaHtml = `
+        <div class="memo-header-meta">
+            <div class="memo-meta-main">
+                <span class="memo-meta-time">Generated ${escapeHtml(genTime)}, data as of today</span>
+                ${tickersText ? `<span class="memo-meta-dot">•</span><span class="memo-meta-tickers">Covered: <strong>${escapeHtml(tickersText)}</strong></span>` : ''}
+            </div>
+            ${modelText ? `<div class="memo-meta-model"><span class="memo-model-badge">${modelText}</span></div>` : ''}
+        </div>
+    `;
+
+    // 2. Optional Dashboard Snapshot (if full_data)
     let dashboardHtml = "";
-    if (data.final_score !== undefined && data.score_breakdown) {
-        const breakdown = data.score_breakdown;
-        const finalScore = escapeHtml(data.final_score);
-        const rec = escapeHtml(data.recommendation || 'N/A');
-        const recBadgeClass = data.recommendation ? escapeHtml(data.recommendation.toLowerCase().replace(/\s+/g, '-')) : 'hold';
-        const techVal = escapeHtml(breakdown.technical);
-        const fundVal = escapeHtml(breakdown.fundamental);
-        const sentVal = escapeHtml(breakdown.sentiment);
-        const riskVal = escapeHtml(breakdown.risk || 0);
-        const confScore = escapeHtml(data.confidence_score || 0);
-        const stratAcc = escapeHtml(data.strategy_accuracy || 68);
-        const triggers = (data.decision_triggers || ["Monitoring market volatility", "Waiting for SMA crossover"])
-            .map(t => `<li>${escapeHtml(t)}</li>`).join('');
+    if (data.full_data && data.full_data.length > 0) {
+        const primary = data.full_data[0];
+        const breakdown = primary.score_breakdown || {};
+        const techVal = breakdown.technical != null ? Number(breakdown.technical).toFixed(0) : "N/A";
+        const fundVal = breakdown.fundamental != null ? Number(breakdown.fundamental).toFixed(0) : "N/A";
+        const sentVal = breakdown.sentiment != null ? Number(breakdown.sentiment).toFixed(0) : "N/A";
 
         dashboardHtml = `
-            <div class="quant-dashboard">
-                <div class="main-score-card">
-                    <div class="score-value">${finalScore}</div>
-                    <div class="score-label">FINAL QUANT SCORE</div>
-                    <div class="rec-badge ${recBadgeClass}">${rec}</div>
+            <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; margin-bottom: 16px;">
+                <div>
+                    <h3 style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 0 0 2px;">${escapeHtml(data.portfolio_ticker || primary.ticker)}</h3>
+                    <span style="font-size: 12px; color: var(--text-secondary);">${getCompanyName(data.portfolio_ticker || primary.ticker)}</span>
                 </div>
-                
-                <div class="metrics-grid">
-                    <div class="metric-item">
-                        <span class="m-label">Technical</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.technical) || 0}%"></div></div>
-                        <span class="m-value">${techVal}/100</span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="m-label">Fundamental</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.fundamental) || 0}%"></div></div>
-                        <span class="m-value">${fundVal}/100</span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="m-label">Sentiment</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.sentiment) || 0}%"></div></div>
-                        <span class="m-value">${sentVal}/100</span>
-                    </div>
-                    <div class="metric-item">
-                        <span class="m-label">Risk</span>
-                        <div class="m-bar-bg"><div class="m-bar-fill" style="width: ${Number(breakdown.risk) || 0}%"></div></div>
-                        <span class="m-value">${riskVal}/100</span>
-                    </div>
+                <div style="font-size: 12.5px; font-weight: 700; color: var(--accent);">Confidence: ${Number(data.confidence_score) || 0}%</div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
+                <div style="background: var(--bg-surface-elevated); padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">Technical Score</div>
+                    <div style="font-size: 14px; font-weight: 700;" class="tabular">${techVal}/100</div>
                 </div>
-                
-                <div class="confidence-footer">
-                    <div class="quant-metric">
-                        <strong>Confidence Rank:</strong> ${confScore}%
-                        <div class="conf-track"><div class="conf-fill" style="width: ${Number(data.confidence_score) || 0}%"></div></div>
-                    </div>
-                    <div class="quant-metric" style="border-left: 2px solid var(--accent); padding-left: 15px; margin-top: 10px;">
-                        <strong style="color: gold;">⭐ Strategy Accuracy:</strong> 
-                        <span style="font-weight: bold; font-size: 1.1em; color: var(--accent);">${stratAcc}%</span>
-                        <br><small style="opacity: 0.7;">(1-Year Institutional Track Record)</small>
-                    </div>
+                <div style="background: var(--bg-surface-elevated); padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">Fundamental Score</div>
+                    <div style="font-size: 14px; font-weight: 700;" class="tabular">${fundVal}/100</div>
+                </div>
+                <div style="background: var(--bg-surface-elevated); padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">Sentiment Score</div>
+                    <div style="font-size: 14px; font-weight: 700;" class="tabular">${sentVal}/100</div>
                 </div>
             </div>
-
-            <div class="triggers-panel">
-                <h4>🎯 Decision Change Triggers</h4>
-                <ul>
-                    ${triggers}
-                </ul>
-            </div>
-            <hr style="margin: 30px 0; border: 0; border-top: 1px solid var(--border);">
         `;
     }
 
-    // 2. Comprehensive Markdown to HTML Parser (Tables + Lists + Highlighting)
+    // 3. Parse Markdown with Table Enhancements and Extract Table of Contents
     const reportText = data.report || "";
-    let html = parseMarkdownOptimized(reportText);
+    const { html: parsedHtml, toc } = parseMarkdownOptimized(reportText);
 
-    content.innerHTML = dashboardHtml + html;
+    // 4. Desktop Sticky Table of Contents (Item 6)
+    let tocHtml = "";
+    if (toc && toc.length > 0) {
+        tocHtml = `
+            <aside class="memo-toc" id="memoToc" aria-label="Table of contents">
+                <div class="memo-toc-title">Contents</div>
+                <nav class="memo-toc-nav">
+                    ${toc.map(item => `<a href="#${item.id}" class="memo-toc-link" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</a>`).join('')}
+                </nav>
+            </aside>
+        `;
+    }
+
+    // 5. Footer Note (Item 5: Educational research only. Not financial advice.)
+    const footerDisclaimerHtml = `
+        <footer class="memo-footer-disclaimer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Educational research only. Not financial advice.</span>
+        </footer>
+    `;
+
+    // Assemble complete memo
+    content.innerHTML = `
+        <div class="memo-wrapper">
+            ${headerMetaHtml}
+            <div class="memo-layout">
+                <article class="memo-main-col">
+                    ${dashboardHtml}
+                    <div class="memo-prose">
+                        ${parsedHtml}
+                    </div>
+                    ${footerDisclaimerHtml}
+                </article>
+                ${tocHtml}
+            </div>
+        </div>
+    `;
+
     output.style.display = "block";
     output.scrollIntoView({ behavior: "smooth" });
 }
 
 function parseMarkdownOptimized(md) {
-    let lines = md.split('\n');
+    const lines = md.split('\n');
     let inTable = false;
-    let tableHtml = "";
-    let finalHtml = [];
+    let tableHeaders = [];
+    let tableRows = [];
+    const finalBlocks = [];
+    const toc = [];
+    let inList = false;
+    let listItems = [];
 
-    lines.forEach(line => {
-        // Table Detection
-        if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+    function flushList() {
+        if (inList && listItems.length > 0) {
+            finalBlocks.push(`<ul>${listItems.join('')}</ul>`);
+            listItems = [];
+            inList = false;
+        }
+    }
+
+    function flushTable() {
+        if (!inTable) return;
+        let html = '<div class="memo-table-container"><table class="memo-table">';
+        if (tableHeaders.length > 0) {
+            html += '<thead><tr>';
+            tableHeaders.forEach(col => {
+                const signalClass = col.type === 'signal' ? ' class="col-signal"' : '';
+                html += `<th${signalClass}>${escapeHtml(col.title)}</th>`;
+            });
+            html += '</tr></thead>';
+        }
+        if (tableRows.length > 0) {
+            html += '<tbody>';
+            tableRows.forEach(row => {
+                html += '<tr>';
+                row.forEach((cell, idx) => {
+                    const col = tableHeaders[idx] || { type: 'text' };
+                    if (col.type === 'rec') {
+                        const cleanRec = cell.replace(/\*/g, '').trim().toUpperCase();
+                        let badgeClass = 'rec-pill rec-pill-neutral';
+                        if (cleanRec.includes('BUY')) badgeClass = 'rec-pill rec-pill-buy';
+                        else if (cleanRec.includes('SELL')) badgeClass = 'rec-pill rec-pill-sell';
+                        else if (cleanRec.includes('HOLD')) badgeClass = 'rec-pill rec-pill-hold';
+                        html += `<td><span class="${badgeClass}">${escapeHtml(cleanRec)}</span></td>`;
+                    } else if (col.type === 'score') {
+                        const cleanVal = cell.replace(/\*/g, '').trim();
+                        const num = parseFloat(cleanVal.replace(/[^0-9.]/g, ''));
+                        if (!isNaN(num)) {
+                            const pct = Math.min(100, Math.max(0, num));
+                            html += `
+                                <td>
+                                    <div class="table-score-wrap">
+                                        <span class="table-score-val tabular">${num}</span>
+                                        <div class="table-score-track">
+                                            <div class="table-score-bar" style="width: ${pct}%;"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                            `;
+                        } else {
+                            html += `<td>${parseInlineMarkdown(cell)}</td>`;
+                        }
+                    } else if (col.type === 'ticker') {
+                        const cleanTicker = cell.replace(/\*/g, '').trim();
+                        html += `<td><strong class="memo-ticker-highlight">${escapeHtml(cleanTicker)}</strong></td>`;
+                    } else if (col.type === 'signal') {
+                        html += `<td class="col-signal">${parseInlineMarkdown(cell)}</td>`;
+                    } else {
+                        html += `<td>${parseInlineMarkdown(cell)}</td>`;
+                    }
+                });
+                html += '</tr>';
+            });
+            html += '</tbody>';
+        }
+        html += '</table></div>';
+        finalBlocks.push(html);
+        inTable = false;
+        tableHeaders = [];
+        tableRows = [];
+    }
+
+    lines.forEach(rawLine => {
+        const trimmed = rawLine.trim();
+
+        // Table line detection: starts and ends with |
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            flushList();
             if (!inTable) {
                 inTable = true;
-                tableHtml = '<div class="table-wrapper"><table>';
+                tableHeaders = [];
+                tableRows = [];
+                // First row is header row
+                const rawCols = trimmed.split('|').slice(1, -1).map(c => c.trim());
+                tableHeaders = rawCols.map(colText => {
+                    let title = colText.replace(/\*/g, '').trim();
+                    // Item 3: Rename "Accuracy" column to "Backtest win rate"
+                    if (/^accuracy$/i.test(title)) {
+                        title = "Backtest win rate";
+                    }
+                    let type = 'text';
+                    if (/rec|recommendation|rating/i.test(title)) type = 'rec';
+                    else if (/score/i.test(title)) type = 'score';
+                    else if (/signal/i.test(title)) type = 'signal';
+                    else if (/ticker|symbol/i.test(title)) type = 'ticker';
+                    else if (/win rate|accuracy|backtest/i.test(title)) type = 'win_rate';
+                    return { title, type };
+                });
+                return;
             }
-            
-            // Skip the separator row |---|---|
-            if (line.includes('---')) return;
 
-            let cells = line.split('|').filter(c => c.trim() !== "").map(c => `<td>${parseInlineMarkdown(c.trim())}</td>`).join('');
-            tableHtml += `<tr>${cells}</tr>`;
+            // Divider row check
+            if (trimmed.includes('---')) {
+                return;
+            }
+
+            // Data row
+            const cells = trimmed.split('|').slice(1, -1).map(c => c.trim());
+            tableRows.push(cells);
+            return;
+        }
+
+        // Exiting table
+        if (inTable) {
+            flushTable();
+        }
+
+        // Bullet lists
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+            inList = true;
+            listItems.push(`<li>${parseInlineMarkdown(trimmed.slice(2))}</li>`);
+            return;
         } else {
-            if (inTable) {
-                inTable = false;
-                tableHtml += '</table></div>';
-                finalHtml.push(tableHtml);
-            }
-            
-            let processedLine = line.trim();
-            if (processedLine === "") {
-                finalHtml.push('<br>');
-            } else if (processedLine.startsWith('### ')) {
-                finalHtml.push(`<h3>${parseInlineMarkdown(processedLine.slice(4))}</h3>`);
-            } else if (processedLine.startsWith('## ')) {
-                finalHtml.push(`<h2>${parseInlineMarkdown(processedLine.slice(3))}</h2>`);
-            } else if (processedLine.startsWith('# ')) {
-                finalHtml.push(`<h1>${parseInlineMarkdown(processedLine.slice(2))}</h1>`);
-            } else if (processedLine.startsWith('* ') || processedLine.startsWith('- ')) {
-                finalHtml.push(`<li>${parseInlineMarkdown(processedLine.slice(2))}</li>`);
-            } else {
-                finalHtml.push(`<p>${parseInlineMarkdown(processedLine)}</p>`);
-            }
+            flushList();
+        }
+
+        if (trimmed === "") {
+            return; // Tighten spacing: do not emit double <br> tags
+        } else if (trimmed.startsWith('### ')) {
+            const hText = trimmed.slice(4).trim();
+            finalBlocks.push(`<h3>${parseInlineMarkdown(hText)}</h3>`);
+        } else if (trimmed.startsWith('## ')) {
+            const hText = trimmed.slice(3).trim();
+            const cleanText = hText.replace(/\*/g, '').replace(/^[0-9.]+\s*/, '').trim();
+            const slug = "sec-" + cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            toc.push({ id: slug, title: cleanText });
+            finalBlocks.push(`<h2 id="${slug}">${parseInlineMarkdown(hText)}</h2>`);
+        } else if (trimmed.startsWith('# ')) {
+            const hText = trimmed.slice(2).trim();
+            const cleanText = hText.replace(/\*/g, '').replace(/^[0-9.]+\s*/, '').trim();
+            const slug = "sec-" + cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            toc.push({ id: slug, title: cleanText });
+            finalBlocks.push(`<h2 id="${slug}">${parseInlineMarkdown(hText)}</h2>`);
+        } else {
+            finalBlocks.push(`<p>${parseInlineMarkdown(trimmed)}</p>`);
         }
     });
 
+    flushList();
     if (inTable) {
-        tableHtml += '</table></div>';
-        finalHtml.push(tableHtml);
+        flushTable();
     }
 
-    return finalHtml.join('');
+    return { html: finalBlocks.join(''), toc };
 }
 
 function parseInlineMarkdown(text) {
+    if (!text) return "";
     return escapeHtml(text)
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/`(.+?)`/g, '<code>$1</code>');
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code style="background: var(--bg-surface-elevated); padding: 2px 4px; border-radius: 4px; font-size: 11px;">$1</code>');
 }
 
-// ========== PROGRESS SIMULATION & ELITE TERMINAL ==========
-let progressInterval = null;
-let consoleInterval = null;
-const PIPELINE_STAGES = [
-    { threshold: 0, text: "Phase 1: Fetching Market Data" },
-    { threshold: 15, text: "Phase 2: Technical Analysis" },
-    { threshold: 30, text: "Phase 3: Fundamental Evaluation" },
-    { threshold: 45, text: "Phase 4: Scanning Sentiment" },
-    { threshold: 60, text: "Phase 5: Calculating Portfolio Risk" },
-    { threshold: 75, text: "Phase 6: Simulating Backtest" },
-    { threshold: 90, text: "Phase 7: Synthesizing Institutional Report" }
-];
-
-const SCAN_LOGS = [
-    "Analyzing Alpha-7 technical clusters...",
-    "RSI Divergence check: NOMINAL",
-    "Fetching news sentiment via LangChain...",
-    "VaR 95% Confidence interval set.",
-    "Monte Carlo stress test: 10,000 runs...",
-    "Cross-referencing SEC 10-K filings...",
-    "Golden Cross detection: ACTIVE",
-    "Bollinger Band squeeze detected.",
-    "Loading Groq LLM semantic engine...",
-    "Fundamental health score: 72/100",
-    "Beta vs SPY: 1.15 (High Sensitivity)",
-    "Sharpe Ratio optimization: 0.82",
-    "Filtering low-confidence news signals...",
-    "Synthesizing institutional markdown..."
-];
-
-function injectConsoleLine(text) {
-    const console = document.getElementById("scanningConsole");
-    if (!console) return;
-    const line = document.createElement("div");
-    line.className = "console-line";
-    line.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
-    console.prepend(line);
-    if (console.children.length > 15) console.removeChild(console.lastChild);
-}
-
-function initGhostBars() {
-    const container = document.getElementById("ghostBars");
-    if (!container) return;
-    container.innerHTML = "";
-    for (let i = 0; i < 40; i++) {
-        const bar = document.createElement("div");
-        bar.className = "ghost-bar";
-        bar.style.animationDelay = `${Math.random() * 2}s`;
-        bar.style.height = `${10 + Math.random() * 70}%`;
-        container.appendChild(bar);
-    }
-}
 
 function setProgress(percent) {
-    const ring = document.getElementById("progressRing");
     const text = document.getElementById("progressPercent");
     const stage = document.getElementById("progressStage");
-    if (!ring || !text || !stage) return;
-
-    const circumference = 345.5;
-    const offset = circumference - (percent / 100) * circumference;
-    ring.style.strokeDashoffset = offset;
-    text.innerText = `${Math.round(percent)}%`;
+    if (text) text.innerText = `${Math.round(percent)}%`;
 
     const currentStage = [...PIPELINE_STAGES].reverse().find(s => percent >= s.threshold);
-    if (currentStage) stage.innerText = currentStage.text;
+    if (stage && currentStage) stage.innerText = currentStage.text;
 }
 
 function startProgressSimulation() {
     let percent = 0;
     setProgress(0);
-    initGhostBars();
-    
-    // Get actual tickers from the UI watchlist
-    const tickerEls = document.querySelectorAll("#advisoryWatchlist li strong");
-    const activeTickers = Array.from(tickerEls).map(el => el.innerText);
-    const console = document.getElementById("scanningConsole");
-    if (console) console.innerHTML = "";
-
-    function getDynamicLog(pct) {
-        const stage = PIPELINE_STAGES.reverse().find(s => pct >= s.threshold);
-        PIPELINE_STAGES.reverse(); // put it back
-        const ticker = activeTickers[Math.floor(Math.random() * activeTickers.length)] || "MARKET";
-        
-        const logs = {
-            0: [
-                `Connecting to Yahoo Finance API...`,
-                `Fetching 1y OHLCV historicals for ${ticker}...`,
-                `Market Data Stream [${ticker}] synced.`
-            ],
-            15: [
-                `Calculating 50/200-day Moving Averages for ${ticker}...`,
-                `RSI-14 Momentum Check for ${ticker}... NOMINAL`,
-                `Running MACD Signal crossover probe on ${ticker}...`
-            ],
-            30: [
-                `Scanning SEC 10-K filings for ${ticker}...`,
-                `P/E Ratio vs Sector Average [${ticker}]...`,
-                `Debt-to-Equity verification: OK.`
-            ],
-            45: [
-                `Extracting sentiment from news headlines (${ticker})...`,
-                `VADER Sentiment scoring complete for ${ticker}.`,
-                `LangChain LLM semantic mood analysis...`
-            ],
-            60: [
-                `Stress testing ${ticker} with 5% Market Shock...`,
-                `Calculating Portfolio VaR with ${ticker} weighting...`,
-                `Beta Sensitivity: ${ticker} vs S&P 500.`
-            ],
-            75: [
-                `Executing SMA-20 Strategy backtest for ${ticker}...`,
-                `Wins: 65% / Max Drawdown: 12% [${ticker}]`,
-                `Checking Golden Cross historical accuracy.`
-            ],
-            90: [
-                `Synthesizing ${activeTickers.length}-stock advisory report...`,
-                `Formatting Institutional Markdown via Groq...`,
-                `Constructing final portfolio recommendation.`
-            ]
-        };
-        
-        const stageLogs = logs[stage ? stage.threshold : 0];
-        return stageLogs[Math.floor(Math.random() * stageLogs.length)];
-    }
+    const consoleEl = document.getElementById("scanningConsole");
+    if (consoleEl) consoleEl.innerHTML = "<div>[SYSTEM] Pipeline initialized...</div>";
 
     progressInterval = setInterval(() => {
-        let increment = 1;
-        if (percent > 60) increment = 0.5;
-        if (percent > 85) increment = 0.2;
-        if (percent > 98) increment = 0;
-        
-        percent += increment;
-        if (percent > 99) percent = 99;
-        setProgress(percent);
-    }, 200);
-
-    // Dynamic console logging using real tickers
-    consoleInterval = setInterval(() => {
-        const msg = getDynamicLog(percent);
-        injectConsoleLine(msg);
-    }, 1200);
+        if (percent < 90) {
+            percent += Math.random() * 8 + 3;
+            if (percent > 90) percent = 90;
+            setProgress(percent);
+        }
+    }, 800);
 }
 
 function stopProgressSimulation() {
     if (progressInterval) clearInterval(progressInterval);
     if (consoleInterval) clearInterval(consoleInterval);
     setProgress(100);
-    injectConsoleLine("SUCCESS: Analysis Complete. Rendering Report...");
 }
 
-// ========== DASHBOARD LOGIC (preserved) ==========
+// ========== DASHBOARD LOGIC ==========
 function showLoading(show) {
     document.getElementById("loadingOverlay").style.display = show ? "flex" : "none";
+}
+
+function setChartType(type) {
+    currentChartType = type;
+    const areaBtn = document.getElementById("chartTypeArea");
+    const candleBtn = document.getElementById("chartTypeCandle");
+    if (areaBtn) areaBtn.classList.toggle("active", type === "area");
+    if (candleBtn) candleBtn.classList.toggle("active", type === "candlestick");
+    if (currentPriceHistory && currentPriceHistory.length > 0) {
+        updateChart(currentPriceHistory);
+    }
 }
 
 async function handleSearch(ticker) {
@@ -747,8 +1294,11 @@ async function handleSearch(ticker) {
         currentTicker = ticker;
         document.getElementById("welcomeScreen").style.display = "none";
         document.getElementById("displayTicker").innerText = ticker;
+        const compEl = document.getElementById("displayCompanyName");
+        if (compEl) compEl.innerText = getCompanyName(ticker);
+
         const exportBtn = document.getElementById("exportPdfBtn");
-        if (exportBtn) exportBtn.style.display = "inline-block";
+        if (exportBtn) exportBtn.style.display = "inline-flex";
 
         const [priceData, techData, fundData, sentData, recData] = await Promise.all([
             fetch(`/api/stock/${ticker}/price?period=1y`, { headers: reqHeaders }).then(r => r.json()),
@@ -777,8 +1327,25 @@ async function handleSearch(ticker) {
 
         if (priceData.data && priceData.data.length > 0) {
             const lastCandle = priceData.data[priceData.data.length - 1];
-            document.getElementById("currentPriceBadge").innerText = `$${lastCandle.Close.toFixed(2)}`;
-            document.getElementById("lastUpdated").innerText = `Last Updated: ${new Date().toLocaleString()}`;
+            const prevCandle = priceData.data.length > 1 ? priceData.data[priceData.data.length - 2] : null;
+            document.getElementById("currentPriceBadge").innerText = fmtPrice(lastCandle.Close);
+            document.getElementById("lastUpdated").innerText = `Last updated: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+            // Single unified change calculation
+            let pctChange = null;
+            if (prevCandle && prevCandle.Close) {
+                pctChange = ((lastCandle.Close - prevCandle.Close) / prevCandle.Close) * 100;
+            }
+            const changeInfo = fmtChange(pctChange);
+            const pill = document.getElementById("priceChangePill");
+            const signEl = document.getElementById("priceChangeSign");
+            const pctEl = document.getElementById("priceChangePercent");
+            if (pill && pctEl) {
+                pill.style.display = "inline-flex";
+                pill.className = `price-change-pill ${changeInfo.className}`;
+                if (signEl) signEl.innerText = changeInfo.sign;
+                pctEl.innerText = changeInfo.text;
+            }
         }
     } catch (error) {
         alert(error.message);
@@ -787,54 +1354,195 @@ async function handleSearch(ticker) {
     }
 }
 
+// ========== SECTION A: PRICE CHART FIX ==========
+// Cause of bug: dataLabels was not disabled, causing ApexCharts to print raw float coordinates on every data point.
+// Solution: dataLabels explicitly disabled; clean recreation on render; fmtPrice on axis/tooltip; at most ONE last-price pill annotation.
 function updateChart(data) {
-    if (chart) chart.destroy();
-    const seriesData = data.map(d => ({ x: new Date(d.Date).getTime(), y: [d.Open, d.High, d.Low, d.Close] }));
-    const volumeData = data.map(d => ({ x: new Date(d.Date).getTime(), y: d.Volume }));
+    if (!data || !Array.isArray(data) || data.length === 0) return;
+    currentPriceHistory = data;
+
+    // Dispose old chart cleanly so annotations/markers never accumulate (Item 2)
+    if (chart) {
+        chart.destroy();
+        chart = null;
+    }
+
+    const isDark = currentTheme === "dark";
+    const areaData = data.map(d => ({ x: new Date(d.Date).getTime(), y: d.Close }));
+    const candleData = data.map(d => ({ x: new Date(d.Date).getTime(), y: [d.Open, d.High, d.Low, d.Close] }));
+
+    // Compute SMA 20
     let smaData = [];
     const windowSize = 20;
-    for (let i = 0; i < seriesData.length; i++) {
+    for (let i = 0; i < data.length; i++) {
         if (i < windowSize - 1) {
-            smaData.push({ x: seriesData[i].x, y: null });
+            smaData.push({ x: new Date(data[i].Date).getTime(), y: null });
         } else {
             let sum = 0;
-            for (let j = 0; j < windowSize; j++) sum += seriesData[i - j].y[3];
-            smaData.push({ x: seriesData[i].x, y: parseFloat((sum / windowSize).toFixed(2)) });
+            for (let j = 0; j < windowSize; j++) sum += data[i - j].Close;
+            smaData.push({ x: new Date(data[i].Date).getTime(), y: parseFloat((sum / windowSize).toFixed(2)) });
         }
     }
-    const maxVol = Math.max(...volumeData.map(d => d.y));
-    const options = {
-        series: [
-            { name: 'Price', type: 'candlestick', data: seriesData },
-            { name: 'SMA 20', type: 'line', data: smaData },
-            { name: 'Volume', type: 'bar', data: volumeData }
-        ],
-        chart: { type: 'line', height: 400, background: 'transparent', toolbar: { show: false }, animations: { enabled: false } },
-        theme: { mode: 'dark' },
-        stroke: { width: [1, 2, 0], colors: ['transparent', '#58a6ff', 'transparent'] },
-        plotOptions: {
-            candlestick: { colors: { upward: '#238636', downward: '#da3633' }, wick: { useFillColor: true } },
-            bar: { columnWidth: '80%', colors: { ranges: [{ from: 0, to: 10000000000, color: 'rgba(139, 148, 158, 0.3)' }] } }
-        },
-        xaxis: { type: 'datetime', labels: { style: { colors: '#8b949e' } }, axisBorder: { show: false }, axisTicks: { show: false } },
-        yaxis: [
-            { seriesName: 'Price', tooltip: { enabled: true }, labels: { style: { colors: '#8b949e' }, formatter: (v) => "$" + v.toFixed(2) } },
-            { seriesName: 'Price', show: false },
-            { seriesName: 'Volume', show: false, max: maxVol * 4 }
-        ],
-        grid: { borderColor: '#30363d', strokeDashArray: 2 },
-        legend: { position: 'top', horizontalAlign: 'left', labels: { colors: '#c9d1d9' } }
+
+    const lastPrice = data[data.length - 1].Close;
+
+    let series = [];
+    let stroke = {};
+    let fill = {};
+
+    if (currentChartType === "area") {
+        series = [
+            { name: 'Price', type: 'area', data: areaData }
+        ];
+        stroke = {
+            curve: 'smooth',
+            width: 2,
+            colors: ['#4f46e5']
+        };
+        fill = {
+            type: 'gradient',
+            gradient: {
+                shadeIntensity: 1,
+                opacityFrom: isDark ? 0.35 : 0.22,
+                opacityTo: 0.02,
+                stops: [0, 95, 100]
+            }
+        };
+    } else {
+        series = [
+            { name: 'Price', type: 'candlestick', data: candleData },
+            { name: 'SMA 20', type: 'line', data: smaData }
+        ];
+        stroke = {
+            width: [1, 2],
+            colors: ['transparent', '#4f46e5']
+        };
+        fill = { type: 'solid' };
+    }
+
+    // At most ONE label on the right axis (last price), styled as a small accent-color pill (Item 4)
+    const annotations = {
+        yaxis: (lastPrice != null) ? [{
+            y: lastPrice,
+            borderColor: '#4f46e5',
+            strokeDashArray: 2,
+            label: {
+                borderColor: '#4f46e5',
+                style: {
+                    color: '#ffffff',
+                    background: '#4f46e5',
+                    fontSize: '11px',
+                    fontFamily: 'Inter',
+                    fontWeight: 600,
+                    padding: { left: 6, right: 6, top: 3, bottom: 3 }
+                },
+                text: fmtPrice(lastPrice),
+                position: 'right',
+                textAnchor: 'start'
+            }
+        }] : []
     };
+
+    const options = {
+        series: series,
+        chart: {
+            type: currentChartType === "area" ? "area" : "candlestick",
+            height: 360,
+            background: 'transparent',
+            toolbar: { show: false },
+            animations: {
+                enabled: true,
+                easing: 'easeout',
+                speed: 600,
+                animateGradually: { enabled: false },
+                dynamicAnimation: { enabled: false }
+            }
+        },
+        theme: { mode: isDark ? 'dark' : 'light' },
+        // CRITICAL FIX: Explicitly disable per-point data labels (Item 1)
+        dataLabels: {
+            enabled: false
+        },
+        markers: {
+            size: 0,
+            hover: {
+                size: 4,
+                sizeOffset: 2
+            }
+        },
+        stroke: stroke,
+        fill: fill,
+        annotations: annotations,
+        plotOptions: {
+            candlestick: {
+                colors: { upward: '#10b981', downward: '#ef4444' },
+                wick: { useFillColor: true }
+            }
+        },
+        xaxis: {
+            type: 'datetime',
+            tickAmount: 6, // About 6 x-axis labels (Item 5)
+            labels: {
+                datetimeUTC: false,
+                format: 'MMM dd',
+                style: { colors: isDark ? '#94a3b8' : '#64748b', fontSize: '11px', fontFamily: 'Inter' }
+            },
+            axisBorder: { show: false },
+            axisTicks: { show: false }
+        },
+        yaxis: {
+            opposite: true, // Right axis (Item 5)
+            labels: {
+                style: { colors: isDark ? '#94a3b8' : '#64748b', fontSize: '11px', fontFamily: 'Inter' },
+                formatter: (v) => fmtPrice(v) // Tabular 2 decimals via fmtPrice (Item 3)
+            }
+        },
+        grid: {
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : '#e5e7eb',
+            strokeDashArray: 2
+        },
+        tooltip: {
+            enabled: true,
+            shared: false,
+            intersect: false,
+            theme: isDark ? 'dark' : 'light',
+            x: { format: 'dd MMM yyyy' },
+            y: {
+                formatter: (v) => fmtPrice(v)
+            }
+        },
+        legend: {
+            show: currentChartType === "candlestick",
+            position: 'top',
+            horizontalAlign: 'left',
+            labels: { colors: isDark ? '#f8fafc' : '#0f172a' }
+        }
+    };
+
     chart = new ApexCharts(document.querySelector("#chartContainer"), options);
     chart.render();
+}
+
+// Period buttons 1W/1M/3M/6M/1Y change both request and visible range (Item 6)
+async function changeTimeframe(period) {
+    if (!currentTicker) return;
+    try {
+        const reqHeaders = authToken ? { "Authorization": `Bearer ${authToken}` } : {};
+        const priceData = await fetch(`/api/stock/${currentTicker}/price?period=${period}`, { headers: reqHeaders }).then(r => r.json());
+        if (priceData && priceData.data && priceData.data.length > 0) {
+            updateChart(priceData.data);
+        }
+    } catch (e) {
+        console.error("Failed to fetch timeframe data", e);
+    }
 }
 
 function updateTechnicals(data) {
     if (!data || !data.available) {
         document.getElementById("trendDir").innerText = "Neutral";
-        document.getElementById("rsiVal").innerText = "N/A";
+        document.getElementById("rsiVal").innerText = "—";
         document.getElementById("rsiInterp").innerText = "";
-        document.getElementById("macdVal").innerText = "N/A";
+        document.getElementById("macdVal").innerText = "—";
         document.getElementById("macdInterp").innerText = "";
         const banner = document.getElementById("crossoverAlert");
         if (banner) banner.style.display = "none";
@@ -842,116 +1550,353 @@ function updateTechnicals(data) {
     }
     const interp = data.interpretations || {};
     document.getElementById("trendDir").innerText = interp.trend || "Neutral";
-    document.getElementById("rsiVal").innerText = data.rsi ? data.rsi.toFixed(2) : "N/A";
+    document.getElementById("rsiVal").innerText = data.rsi != null ? Number(data.rsi).toFixed(2) : "—";
     document.getElementById("rsiInterp").innerText = interp.rsi || "";
-    document.getElementById("macdVal").innerText = data.macd ? data.macd.toFixed(2) : "N/A";
+    document.getElementById("macdVal").innerText = data.macd != null ? Number(data.macd).toFixed(2) : "—";
     document.getElementById("macdInterp").innerText = interp.macd || "";
+
     const banner = document.getElementById("crossoverAlert");
-    if (data.crossover_signal && data.crossover_signal !== "None") {
+    if (banner && (interp.crossover === "Golden Cross" || interp.crossover === "Death Cross")) {
         banner.style.display = "block";
-        document.getElementById("crossoverText").innerText = data.crossover_signal;
-        banner.className = "crossover-banner " + (data.crossover_signal.includes("Golden") ? "golden" : "death");
-    } else {
+        document.getElementById("crossoverText").innerText = `${interp.crossover} Active`;
+        document.getElementById("crossoverIcon").innerText = interp.crossover === "Golden Cross" ? "⚡" : "⚠️";
+    } else if (banner) {
         banner.style.display = "none";
     }
 }
 
 function updateFundamentals(data) {
     if (!data || !data.available || !data.metrics) {
-        document.getElementById("fundScore").innerText = "N/A";
-        document.getElementById("peVal").innerText = "N/A";
-        document.getElementById("epsVal").innerText = "N/A";
+        document.getElementById("fundScore").innerText = "—";
+        document.getElementById("peVal").innerText = "—";
+        document.getElementById("epsVal").innerText = "—";
         return;
     }
-    document.getElementById("fundScore").innerText = data.fundamental_score !== null && data.fundamental_score !== undefined ? `${data.fundamental_score}/100` : "N/A";
-    document.getElementById("peVal").innerText = data.metrics.pe_ratio || "N/A";
-    document.getElementById("epsVal").innerText = data.metrics.eps ? `$${data.metrics.eps}` : "N/A";
+    document.getElementById("fundScore").innerText = data.fundamental_score != null ? `${data.fundamental_score}/100` : "—";
+    document.getElementById("peVal").innerText = data.metrics.pe_ratio != null ? Number(data.metrics.pe_ratio).toFixed(2) : "—";
+    document.getElementById("epsVal").innerText = data.metrics.eps != null ? fmtPrice(data.metrics.eps) : "—";
 }
 
 function updateSentiment(data) {
     const labelEl = document.getElementById("sentimentLabel");
     const pointer = document.getElementById("sentimentPointer");
-    const headlines = document.getElementById("sentimentHeadlines");
-    if (!data) { labelEl.innerText = "No Data"; pointer.style.left = "50%"; headlines.innerText = "Could not retrieve sufficient news."; return; }
-    labelEl.innerText = data.sentiment_label;
-    headlines.innerText = data.summary_text || "Recent news sentiment.";
+    const briefEl = document.getElementById("sentimentSummaryBrief");
+    if (!data) {
+        if (labelEl) labelEl.innerText = "No Data";
+        if (pointer) pointer.style.left = "50%";
+        if (briefEl) briefEl.innerText = "Could not retrieve sufficient news.";
+        updateNewsList(null);
+        return;
+    }
+    if (labelEl) labelEl.innerText = data.sentiment_label || "Neutral";
+    if (briefEl) briefEl.innerText = data.summary_text ? "Real-time news headlines synthesized." : "No active news.";
     const position = ((data.sentiment_score + 1) / 2) * 100;
-    pointer.style.left = `calc(${position}% - 5px)`;
+    if (pointer) pointer.style.left = `${Math.min(100, Math.max(0, position))}%`;
+
+    updateNewsList(data);
 }
 
-async function changeTimeframe(period) {
-    if (!currentTicker) return;
-    try {
-        const reqHeaders = authToken ? { "Authorization": `Bearer ${authToken}` } : {};
-        const priceData = await fetch(`/api/stock/${currentTicker}/price?period=${period}`, { headers: reqHeaders }).then(r => r.json());
-        if (priceData && priceData.data) updateChart(priceData.data);
-    } catch (e) { console.error("Failed to fetch timeframe data", e); }
+// ========== SECTION B: NEWS / SENTIMENT FIX ==========
+// Item 8 & 9: Split on "|" only, trim, drop empties, up to 5 rows with 2-line clamp.
+// Remove all invented source names and timestamps!
+function updateNewsList(data) {
+    const container = document.getElementById("sentimentHeadlines");
+    if (!container) return;
+
+    if (!data || !data.summary_text) {
+        container.innerHTML = `<p style="font-size: 12px; color: var(--text-muted); padding: 8px 0;">No active headlines available.</p>`;
+        return;
+    }
+
+    const headlines = data.summary_text
+        .split("|")
+        .map(h => h.trim())
+        .filter(h => h.length > 0)
+        .slice(0, 5);
+
+    if (headlines.length === 0) {
+        container.innerHTML = `<p style="font-size: 12px; color: var(--text-muted); padding: 8px 0;">No active headlines available.</p>`;
+        return;
+    }
+
+    let html = `<ul class="news-list" id="newsListContainer">`;
+    headlines.forEach(headline => {
+        html += `
+            <li class="news-item">
+                <span class="news-title">${escapeHtml(headline)}</span>
+            </li>
+        `;
+    });
+    html += `</ul>`;
+    container.innerHTML = html;
 }
 
 function updateRecommendation(data) {
     if (!data) return;
     const badge = document.getElementById("recBadge");
-    badge.innerText = data.recommendation || "HOLD";
-    badge.className = "recommendation-badge";
-    badge.classList.add(`rec-${data.recommendation || 'HOLD'}`);
+    if (badge) {
+        badge.innerText = data.recommendation || "HOLD";
+        badge.className = `decision-badge rec-${data.recommendation || 'HOLD'}`;
+    }
     document.getElementById("confidenceText").innerText = `${data.confidence_score || 0}%`;
     document.getElementById("confidenceBar").style.width = `${data.confidence_score || 0}%`;
     document.getElementById("riskLevel").innerText = data.risk_level || "Medium";
-    document.getElementById("explanationText").innerText = data.explanation_text || "";
+
+    // Item 15: Clamp summary and show read more toggle if long
+    const explEl = document.getElementById("explanationText");
+    const readMoreBtn = document.getElementById("readMoreBtn");
+    if (explEl) {
+        explEl.innerText = data.explanation_text || "";
+        if (readMoreBtn) {
+            readMoreBtn.style.display = (data.explanation_text && data.explanation_text.length > 200) ? "inline-block" : "none";
+            readMoreBtn.innerText = "Read more";
+            explEl.classList.add("clamped");
+        }
+    }
+
     if (data.score_breakdown) {
-        document.getElementById("techFill").style.width = `${data.score_breakdown.technical || 0}%`;
-        document.getElementById("fundFill").style.width = `${data.score_breakdown.fundamental || 0}%`;
-        document.getElementById("sentFill").style.width = `${data.score_breakdown.sentiment || 0}%`;
+        const b = data.score_breakdown;
+        document.getElementById("techFill").style.width = `${b.technical || 0}%`;
+        document.getElementById("fundFill").style.width = `${b.fundamental || 0}%`;
+        document.getElementById("sentFill").style.width = `${b.sentiment || 0}%`;
+        const tLabel = document.getElementById("techScoreLabel");
+        const fLabel = document.getElementById("fundScoreLabel");
+        const sLabel = document.getElementById("sentScoreLabel");
+        if (tLabel) tLabel.innerText = `${b.technical || 0}/100`;
+        if (fLabel) fLabel.innerText = `${b.fundamental || 0}/100`;
+        if (sLabel) sLabel.innerText = `${b.sentiment || 0}/100`;
     }
     document.getElementById("portfolioWeight").innerText = data.portfolio_allocation || "10%";
     document.getElementById("priceProb").innerText = data.price_prediction || "Moderate-High";
 }
 
+// ========== SECTION D: BACKTEST FIX ==========
+// Item 12: Read real fields: available, accuracy, win_rate, total_signals, period.
+// Item 13: Win rate uses neutral text color.
 function updateBacktest(data) {
-    document.getElementById("winRate").innerText = data.win_rate + "%";
-    document.getElementById("backtestRoi").innerText = (data.total_roi > 0 ? "+" : "") + data.total_roi + "%";
-    if (backtestChart) backtestChart.destroy();
-    const options = {
-        series: [{ name: "Equity Curve", data: data.equity_curve }],
-        chart: { type: 'area', height: 180, toolbar: { show: false }, background: 'transparent' },
-        dataLabels: { enabled: false },
-        stroke: { curve: 'smooth', width: 2, colors: ['#58a6ff'] },
-        fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.1 } },
-        xaxis: { type: 'datetime', labels: { show: false }, axisBorder: { show: false }, axisTicks: { show: false } },
-        yaxis: { show: false },
-        grid: { show: false },
-        theme: { mode: 'dark' },
-        tooltip: { theme: 'dark', x: { format: 'dd MMM yyyy' } }
-    };
-    backtestChart = new ApexCharts(document.querySelector("#backtestChart"), options);
-    backtestChart.render();
+    const winRateEl = document.getElementById("winRate");
+    const roiEl = document.getElementById("backtestRoi");
+    const chartContainer = document.getElementById("backtestChart");
+
+    if (backtestChart) {
+        backtestChart.destroy();
+        backtestChart = null;
+    }
+
+    if (!data || !data.available) {
+        if (winRateEl) {
+            winRateEl.innerText = "—";
+            winRateEl.style.color = "var(--text-primary)";
+        }
+        if (roiEl) {
+            roiEl.innerText = "—";
+            roiEl.style.color = "var(--text-secondary)";
+        }
+        if (chartContainer) {
+            chartContainer.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 140px; text-align: center; color: var(--text-muted); font-size: 12px; gap: 6px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span>Insufficient historical data to simulate RSI + SMA50 signals for this asset.</span>
+                </div>
+            `;
+        }
+        return;
+    }
+
+    // Win rate uses neutral text color (Item 13)
+    if (winRateEl) {
+        winRateEl.innerText = `${Number(data.win_rate).toFixed(1)}%`;
+        winRateEl.style.color = "var(--text-primary)"; // Neutral text color
+    }
+
+    // Signals count and evaluation
+    if (roiEl) {
+        roiEl.innerText = `${data.total_signals} signals (${data.period || "1 Year"})`;
+        roiEl.style.color = "var(--text-secondary)";
+    }
+
+    // Trades summary rendered cleanly in container (Item 12)
+    if (chartContainer) {
+        chartContainer.innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 20px 0; text-align: center;">
+                <div style="background: var(--bg-surface-elevated); padding: 14px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Simulation Period</div>
+                    <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);">${escapeHtml(data.period || "1 Year")}</div>
+                </div>
+                <div style="background: var(--bg-surface-elevated); padding: 14px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Total Signals Evaluated</div>
+                    <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);" class="tabular">${data.total_signals}</div>
+                </div>
+                <div style="background: var(--bg-surface-elevated); padding: 14px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Hit Rate / Accuracy</div>
+                    <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);" class="tabular">${Number(data.win_rate).toFixed(1)}%</div>
+                </div>
+            </div>
+        `;
+    }
 }
 
-// ========== WATCHLIST (local sidebar, no auth required for load but posts with auth) ==========
+// ========== SECTION C: REAL DATA IN WATCHLIST & TICKER TAPE ==========
+// Item 10: Compute daily % from real API data in ONE helper used by hero, ticker tape, sidebar and watchlist table.
+// No mock formulas or hardcoded values!
 async function loadWatchlist() {
     try {
         const res = await fetch("/api/watchlist", { headers: authToken ? { "Authorization": `Bearer ${authToken}` } : {} });
         if (!res.ok) return;
         const items = await res.json();
-        const ul = document.getElementById("watchlistList");
-        ul.innerHTML = "";
-        items.forEach(item => {
-            const li = document.createElement("li");
-            const spanTicker = document.createElement("span");
-            spanTicker.textContent = item.ticker;
-            const spanPrice = document.createElement("span");
-            spanPrice.textContent = item.price ? '$' + item.price : '...';
-            li.appendChild(spanTicker);
-            li.appendChild(document.createTextNode(" "));
-            li.appendChild(spanPrice);
-            li.addEventListener("click", () => {
-                const searchInput = document.getElementById("searchInput");
-                if (searchInput) searchInput.value = item.ticker;
-                handleSearch(item.ticker);
+
+        // 1. Sidebar watchlist list
+        const sidebarUl = document.getElementById("watchlistList");
+        if (sidebarUl) {
+            sidebarUl.innerHTML = "";
+            items.forEach(item => {
+                const li = document.createElement("li");
+                li.className = "sidebar-wl-item";
+
+                const leftDiv = document.createElement("div");
+                leftDiv.className = "sidebar-wl-left";
+
+                const av = document.createElement("div");
+                av.className = "letter-avatar";
+                const avColor = getAvatarColor(item.ticker[0]);
+                av.style.backgroundColor = avColor.bg;
+                av.style.color = avColor.text;
+                av.textContent = (item.ticker[0] || "A").toUpperCase();
+
+                const strong = document.createElement("strong");
+                strong.textContent = item.ticker;
+
+                leftDiv.appendChild(av);
+                leftDiv.appendChild(strong);
+
+                const spanPrice = document.createElement("span");
+                spanPrice.className = "price-val tabular";
+                spanPrice.textContent = item.price ? fmtPrice(item.price) : "—";
+
+                li.appendChild(leftDiv);
+                li.appendChild(spanPrice);
+
+                li.addEventListener("click", () => {
+                    const searchInput = document.getElementById("searchInput");
+                    if (searchInput) searchInput.value = item.ticker;
+                    handleSearch(item.ticker);
+                });
+                sidebarUl.appendChild(li);
             });
-            ul.appendChild(li);
+        }
+
+        // 2. Main Watchlist Table Body
+        const tbody = document.getElementById("watchlistTableBody");
+        if (tbody) {
+            tbody.innerHTML = "";
+            items.forEach(item => {
+                const tr = document.createElement("tr");
+                tr.className = "wl-row";
+
+                // Cell 1: Letter Avatar + Ticker
+                const tdTicker = document.createElement("td");
+                const tickerCellDiv = document.createElement("div");
+                tickerCellDiv.className = "wl-ticker-cell";
+                const av = document.createElement("div");
+                av.className = "letter-avatar";
+                const avColor = getAvatarColor(item.ticker[0]);
+                av.style.backgroundColor = avColor.bg;
+                av.style.color = avColor.text;
+                av.textContent = (item.ticker[0] || "A").toUpperCase();
+                const tickerSpan = document.createElement("strong");
+                tickerSpan.textContent = item.ticker;
+                tickerCellDiv.appendChild(av);
+                tickerCellDiv.appendChild(tickerSpan);
+                tdTicker.appendChild(tickerCellDiv);
+
+                // Cell 2: Company Name
+                const tdCompany = document.createElement("td");
+                tdCompany.style.color = "var(--text-secondary)";
+                tdCompany.textContent = getCompanyName(item.ticker);
+
+                // Cell 3: Price
+                const tdPrice = document.createElement("td");
+                tdPrice.className = "tabular";
+                tdPrice.style.fontWeight = "600";
+                tdPrice.textContent = item.price ? fmtPrice(item.price) : "—";
+
+                // Cell 4: Daily % Change (Real data from API via fmtChange helper)
+                const tdChange = document.createElement("td");
+                const changeInfo = fmtChange(item.change_pct);
+                const changePill = document.createElement("span");
+                changePill.className = `price-change-pill ${changeInfo.className}`;
+                changePill.textContent = changeInfo.text;
+                tdChange.appendChild(changePill);
+
+                // Cell 5: Hover-only Remove Button
+                const tdAction = document.createElement("td");
+                tdAction.style.textAlign = "right";
+                const removeBtn = document.createElement("button");
+                removeBtn.className = "wl-remove-btn";
+                removeBtn.title = `Remove ${item.ticker}`;
+                removeBtn.textContent = "✕";
+                removeBtn.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    await removeAdvisoryStock(item.ticker);
+                    loadWatchlist();
+                });
+                tdAction.appendChild(removeBtn);
+
+                tr.appendChild(tdTicker);
+                tr.appendChild(tdCompany);
+                tr.appendChild(tdPrice);
+                tr.appendChild(tdChange);
+                tr.appendChild(tdAction);
+
+                tr.addEventListener("click", () => {
+                    const searchInput = document.getElementById("searchInput");
+                    if (searchInput) searchInput.value = item.ticker;
+                    handleSearch(item.ticker);
+                });
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 3. Render Ticker Tape
+        renderTickerTape(items);
+
+    } catch (e) {
+        console.error("Failed to load watchlist", e);
+    }
+}
+
+// Ticker tape: rendered strictly from real watchlist data, or clean message if empty
+function renderTickerTape(items) {
+    const track = document.getElementById("tickerTapeTrack");
+    if (!track) return;
+    track.innerHTML = "";
+
+    if (!items || items.length === 0) {
+        track.innerHTML = `<span style="font-size: 11px; color: var(--text-muted); padding: 0 16px;">Add assets to your watchlist to monitor real-time prices</span>`;
+        return;
+    }
+
+    // Duplicate list to create a seamless infinite loop
+    const doubleList = [...items, ...items];
+
+    doubleList.forEach(item => {
+        const changeInfo = fmtChange(item.change_pct);
+
+        const span = document.createElement("div");
+        span.className = "tape-item";
+        span.innerHTML = `
+            <span class="tape-symbol">${escapeHtml(item.ticker)}</span>
+            <span class="tape-price tabular">${fmtPrice(item.price)}</span>
+            <span class="tape-change ${changeInfo.className} tabular">${changeInfo.text}</span>
+        `;
+        span.addEventListener("click", () => {
+            const searchInput = document.getElementById("searchInput");
+            if (searchInput) searchInput.value = item.ticker;
+            handleSearch(item.ticker);
         });
-    } catch (e) { console.error("Failed to load watchlist", e); }
+        track.appendChild(span);
+    });
 }
 
 async function addToWatchlist(ticker) {
@@ -965,13 +1910,16 @@ async function addToWatchlist(ticker) {
         });
         loadWatchlist();
         loadAdvisoryWatchlist();
-    } catch (e) { console.error("Failed to add to watchlist", e); }
+    } catch (e) {
+        console.error("Failed to add to watchlist", e);
+    }
 }
 
 // ========== PRICE ALERTS ==========
 function setPriceAlert(ticker, price) {
     activeAlerts.push({ ticker, target: price, triggered: false });
-    document.getElementById("activeAlerts").innerText = `Live Guard active for ${ticker} at $${price}`;
+    const alertsEl = document.getElementById("activeAlerts");
+    if (alertsEl) alertsEl.innerText = `Live alert active for ${ticker} at ${fmtPrice(price)}`;
     if (Notification.permission !== "granted") Notification.requestPermission();
 }
 
@@ -993,7 +1941,9 @@ async function checkAlerts() {
 
 function triggerAlert(alertObj, currentPrice) {
     alertObj.triggered = true;
-    const msg = `ALERT: ${alertObj.ticker} reached target $${currentPrice.toFixed(2)}!`;
-    new Notification("StockSense AI", { body: msg });
+    const msg = `ALERT: ${alertObj.ticker} reached target ${fmtPrice(currentPrice)}!`;
+    if (Notification.permission === "granted") {
+        new Notification("TradeIQ AI", { body: msg });
+    }
     alert("🚨 " + msg);
 }

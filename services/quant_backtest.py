@@ -32,27 +32,27 @@ def run_institutional_backtest(df: pd.DataFrame, ticker: str) -> dict:
         # Forward Return (10-day window)
         data['forward_return'] = data['Close'].shift(-10) / data['Close'] - 1
         
-        # Evaluate Accuracy
-        # Success if Signal was 1 and Return > 0, OR Signal was -1 and Return < 0
-        signals = data[data['signal'] != 0].copy()
+        # Distinct trade entries: trigger only when signal transitions (new trade initiation)
+        data['prev_signal'] = data['signal'].shift(1).fillna(0)
+        trades = data[(data['signal'] != 0) & (data['signal'] != data['prev_signal']) & (data['forward_return'].notna())].copy()
         
-        if len(signals) == 0:
+        if len(trades) == 0:
             return {"available": False, "accuracy": 0.0, "total_signals": 0, "win_rate": 0.0}
 
-        signals['is_correct'] = False
-        signals.loc[(signals['signal'] == 1) & (signals['forward_return'] > 0), 'is_correct'] = True
-        signals.loc[(signals['signal'] == -1) & (signals['forward_return'] < 0), 'is_correct'] = True
+        trades['is_correct'] = False
+        trades.loc[(trades['signal'] == 1) & (trades['forward_return'] > 0), 'is_correct'] = True
+        trades.loc[(trades['signal'] == -1) & (trades['forward_return'] < 0), 'is_correct'] = True
         
-        accuracy = float((signals['is_correct'].sum() / len(signals)) * 100)
+        accuracy = float((trades['is_correct'].sum() / len(trades)) * 100)
         win_rate = round(accuracy, 1)
         
-        logger.info(f"[Backtest] {ticker} Accuracy: {win_rate}% over {len(signals)} signals.")
+        logger.info(f"[Backtest] {ticker} Accuracy: {win_rate}% over {len(trades)} distinct trades.")
         
         return {
             "available": True,
             "accuracy": win_rate,
             "win_rate": win_rate,
-            "total_signals": len(signals),
+            "total_signals": len(trades),
             "period": "1 Year"
         }
     except Exception as e:

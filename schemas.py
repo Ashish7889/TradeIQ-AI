@@ -15,6 +15,8 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    username: str | None = None
+
 
 class TokenData(BaseModel):
     username: str | None = None
@@ -31,6 +33,19 @@ class PreferenceOut(PreferenceUpdate):
 
     class Config:
         from_attributes = True
+
+
+class UserProfileOut(BaseModel):
+    id: int
+    username: str
+    watchlist_count: int
+    preferences: PreferenceOut | None = None
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
 
 class TechSummary(BaseModel):
     tech_score: float | None = None

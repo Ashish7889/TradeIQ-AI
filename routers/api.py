@@ -6,7 +6,7 @@ from database import get_db
 from dependencies import valid_ticker
 from limiter import limiter
 from models import User, UserPreference, Watchlist
-from security import get_current_user
+from security import get_current_user, get_password_hash, verify_password
 from services.fundamental import evaluate_fundamentals
 from services.langchain_agent import StockAnalysisPipeline
 from services.quant_backtest import run_institutional_backtest
@@ -129,12 +129,17 @@ def get_watchlist(db: Session = Depends(get_db), current_user: User = Depends(ge
     # Let's also fetch latest prices
     result = []
     for item in items:
-        df = fetch_stock_data(item.ticker, period="1d", db=db)
-        if df is not None and not df.empty:
-             val = float(df.iloc[-1]['Close'])
-             result.append({"ticker": item.ticker, "price": round(val, 2)})
+        df = fetch_stock_data(item.ticker, period="5d", db=db)
+        if df is not None and len(df) >= 2:
+            val = float(df.iloc[-1]['Close'])
+            prev = float(df.iloc[-2]['Close'])
+            pct = round(((val - prev) / prev) * 100, 2)
+            result.append({"ticker": item.ticker, "price": round(val, 2), "change_pct": pct})
+        elif df is not None and not df.empty:
+            val = float(df.iloc[-1]['Close'])
+            result.append({"ticker": item.ticker, "price": round(val, 2), "change_pct": 0.0})
         else:
-             result.append({"ticker": item.ticker, "price": None})
+            result.append({"ticker": item.ticker, "price": None, "change_pct": None})
              
     return result
 
@@ -161,7 +166,31 @@ def update_preferences(prefs_in: schemas.PreferenceUpdate, db: Session = Depends
     db.commit()
     db.refresh(prefs)
     return prefs
+
+
+@router.get("/user/profile", response_model=schemas.UserProfileOut)
+def get_user_profile(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    wl_count = db.query(Watchlist).filter(Watchlist.user_id == current_user.id).count()
+    prefs = db.query(UserPreference).filter(UserPreference.user_id == current_user.id).first()
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "watchlist_count": wl_count,
+        "preferences": prefs,
+    }
+
+
+@router.post("/user/change-password")
+def change_password(data: schemas.ChangePasswordIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    current_user.hashed_password = get_password_hash(data.new_password)
+    db.commit()
+    return {"message": "Password updated successfully"}
+
+
 @router.get("/stock/{ticker}/backtest")
+
 def get_backtest(ticker: str = Depends(valid_ticker), db: Session = Depends(get_db)):
     df = fetch_stock_data(ticker, period="1y", db=db)
     if df is None or df.empty:

@@ -86,8 +86,32 @@ def test_auth_flow(client):
     add_invalid = client.post("/api/watchlist/add", json={"ticker": "INVALID$$"}, headers=headers)
     assert add_invalid.status_code == 422
 
+    # 8. User profile endpoint
+    profile_resp = client.get("/api/user/profile", headers=headers)
+    assert profile_resp.status_code == 200
+    profile_data = profile_resp.json()
+    assert profile_data["username"] == "trader_alice"
+    assert profile_data["watchlist_count"] == 1
+    assert "preferences" in profile_data
+
+    # 9. Change password
+    pwd_resp = client.post(
+        "/api/user/change-password",
+        json={"current_password": "supersecretpassword123", "new_password": "brandnewpassword999"},
+        headers=headers,
+    )
+    assert pwd_resp.status_code == 200
+
+    # 10. Login with new password
+    new_login = client.post(
+        "/api/auth/login",
+        data={"username": "trader_alice", "password": "brandnewpassword999"},
+    )
+    assert new_login.status_code == 200
+
 
 def test_endpoint_ticker_validation(client):
     # Test path ticker validation
     resp = client.get("/api/stock/INVALID$$/sentiment")
     assert resp.status_code == 422
+

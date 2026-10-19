@@ -24,3 +24,8 @@ build/
 
 # Logs
 *.log
+
+# Agent workspace rules
+.agent/
+.agents/
+
