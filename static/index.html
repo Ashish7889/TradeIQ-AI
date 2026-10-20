@@ -7,7 +7,7 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/style.css?v=12">
+    <link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
 
@@ -62,6 +62,9 @@
             <!-- ================= SIGN IN STEP 2: Password ================= -->
             <div class="auth-step" id="signInStep2" style="display: none;">
                 <form id="loginPasswordForm" onsubmit="handleSignInStep2Submit(event)">
+                    <!-- Visually hidden username input for password manager autofill pairing -->
+                    <input type="text" id="loginPasswordUsername" name="username" autocomplete="username" class="visually-hidden" tabindex="-1" aria-hidden="true">
+
                     <!-- Identity Tile (Back Arrow + Username) -->
                     <div class="auth-identity-banner">
                         <button type="button" class="auth-back-btn" onclick="backToSignInStep1()" aria-label="Change username" title="Back to username">
@@ -133,6 +136,9 @@
             <!-- ================= SIGN UP STEP 2: Password ================= -->
             <div class="auth-step" id="signUpStep2" style="display: none;">
                 <form id="signupPasswordForm" onsubmit="handleSignUpStep2Submit(event)">
+                    <!-- Visually hidden username input for password manager autofill pairing -->
+                    <input type="text" id="signupPasswordUsername" name="username" autocomplete="username" class="visually-hidden" tabindex="-1" aria-hidden="true">
+
                     <!-- Identity Tile (Back Arrow + Username) -->
                     <div class="auth-identity-banner">
                         <button type="button" class="auth-back-btn" onclick="backToSignUpStep1()" aria-label="Change username" title="Back to username">
@@ -752,15 +758,20 @@
                         <span class="card-title">Security & Credentials</span>
                     </div>
                     <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">Update your account password</p>
-                    <div class="pref-group">
-                        <label for="currentPasswordInput">Current Password</label>
-                        <input type="password" id="currentPasswordInput" class="auth-input" placeholder="Enter current password" autocomplete="current-password" style="margin-bottom: 10px;">
-                    </div>
-                    <div class="pref-group">
-                        <label for="newPasswordInput">New Password</label>
-                        <input type="password" id="newPasswordInput" class="auth-input" placeholder="Minimum 8 characters" autocomplete="new-password" style="margin-bottom: 10px;">
-                    </div>
-                    <button class="btn-secondary" style="width: 100%;" onclick="handleAccountChangePassword()">Update Password</button>
+                    <form id="accountPasswordForm" onsubmit="handleAccountChangePassword(event)">
+                        <!-- Visually hidden username input for password manager autofill pairing -->
+                        <input type="text" id="accountChangePasswordUsername" name="username" autocomplete="username" class="visually-hidden" tabindex="-1" aria-hidden="true">
+
+                        <div class="pref-group">
+                            <label for="currentPasswordInput">Current Password</label>
+                            <input type="password" id="currentPasswordInput" name="current_password" class="auth-input" placeholder="Enter current password" autocomplete="current-password" style="margin-bottom: 10px;" required>
+                        </div>
+                        <div class="pref-group">
+                            <label for="newPasswordInput">New Password</label>
+                            <input type="password" id="newPasswordInput" name="new_password" class="auth-input" placeholder="Minimum 8 characters" autocomplete="new-password" style="margin-bottom: 10px;" required>
+                        </div>
+                        <button type="submit" class="btn-secondary" style="width: 100%;">Update Password</button>
+                    </form>
                     <div id="accountPwdMsg" style="display:none; font-size: 11px; text-align: center; margin-top: 8px;"></div>
                 </div>
 
@@ -823,6 +834,6 @@
     <p>Synthesizing market intelligence...</p>
 </div>
 
-<script defer src="/static/app.js?v=12"></script>
+<script defer src="/static/app.js?v=13"></script>
 </body>
 </html>

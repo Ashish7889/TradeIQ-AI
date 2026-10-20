@@ -190,6 +190,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (signupFormEl) signupFormEl.addEventListener("submit", handleSignUpStep1Submit);
     const signupPasswordFormEl = document.getElementById("signupPasswordForm");
     if (signupPasswordFormEl) signupPasswordFormEl.addEventListener("submit", handleSignUpStep2Submit);
+    const accountPasswordFormEl = document.getElementById("accountPasswordForm");
+    if (accountPasswordFormEl) accountPasswordFormEl.addEventListener("submit", handleAccountChangePassword);
+
+    // Synchronize username to visually-hidden fields in step 2 for password managers
+    const loginUserInput = document.getElementById("loginUsername");
+    if (loginUserInput) {
+        loginUserInput.addEventListener("input", (e) => {
+            const hidden = document.getElementById("loginPasswordUsername");
+            if (hidden) hidden.value = e.target.value.trim();
+        });
+    }
+    const signupUserInput = document.getElementById("signupUsername");
+    if (signupUserInput) {
+        signupUserInput.addEventListener("input", (e) => {
+            const hidden = document.getElementById("signupPasswordUsername");
+            if (hidden) hidden.value = e.target.value.trim();
+        });
+    }
 
     // Escape key navigates back to step 1
     document.addEventListener("keydown", (e) => {
@@ -336,6 +354,9 @@ function updateUserDisplays(username) {
         heroAv.style.backgroundColor = avColor.bg;
         heroAv.style.color = avColor.text;
     }
+
+    const accPwdUser = document.getElementById("accountChangePasswordUsername");
+    if (accPwdUser) accPwdUser.value = username;
 }
 
 function showApp() {
@@ -425,6 +446,8 @@ function handleSignInStep1Submit(e) {
     }
     const displayEl = document.getElementById("signInDisplayUser");
     if (displayEl) displayEl.innerText = username;
+    const hiddenUser = document.getElementById("loginPasswordUsername");
+    if (hiddenUser) hiddenUser.value = username;
 
     const s1 = document.getElementById("signInStep1");
     const s2 = document.getElementById("signInStep2");
@@ -514,6 +537,8 @@ function handleSignUpStep1Submit(e) {
 
     const displayEl = document.getElementById("signUpDisplayUser");
     if (displayEl) displayEl.innerText = username;
+    const hiddenUser = document.getElementById("signupPasswordUsername");
+    if (hiddenUser) hiddenUser.value = username;
 
     const s1 = document.getElementById("signUpStep1");
     const s2 = document.getElementById("signUpStep2");
@@ -681,6 +706,12 @@ function handleLogout() {
     if (pass1) pass1.value = "";
     const pass2 = document.getElementById("signupPassword");
     if (pass2) pass2.value = "";
+    const h1 = document.getElementById("loginPasswordUsername");
+    if (h1) h1.value = "";
+    const h2 = document.getElementById("signupPasswordUsername");
+    if (h2) h2.value = "";
+    const h3 = document.getElementById("accountChangePasswordUsername");
+    if (h3) h3.value = "";
 
     showAuthModal();
 }
@@ -714,6 +745,7 @@ window.switchTab = switchTab;
 window.showAuthError = showAuthError;
 window.setAuth = setAuth;
 window.handleLogout = handleLogout;
+window.handleAccountChangePassword = handleAccountChangePassword;
 
 function authHeaders() {
     return {
@@ -964,7 +996,8 @@ async function saveAccountPreferences() {
     }
 }
 
-async function handleAccountChangePassword() {
+async function handleAccountChangePassword(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     const curPwd = document.getElementById("currentPasswordInput").value;
     const newPwd = document.getElementById("newPasswordInput").value;
     const msg = document.getElementById("accountPwdMsg");
