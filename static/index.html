@@ -4,11 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TradeIQ | Institutional Quant Terminal</title>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <link rel="stylesheet" href="/static/style.css?v=8">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/static/style.css?v=11">
 </head>
 <body>
 
@@ -21,25 +20,25 @@
         <div class="modal-logo">TradeIQ <span>QUANT</span></div>
         <p class="modal-sub">Institutional stock intelligence & synthesis</p>
         <div class="tab-strip">
-            <button class="tab-btn active" id="showLoginTab" onclick="switchTab('login')">Sign in</button>
-            <button class="tab-btn" id="showSignupTab" onclick="switchTab('signup')">Create account</button>
+            <button type="button" class="tab-btn active" id="showLoginTab" onclick="switchTab('login')">Sign in</button>
+            <button type="button" class="tab-btn" id="showSignupTab" onclick="switchTab('signup')">Create account</button>
         </div>
         <!-- Login -->
-        <div id="loginForm">
+        <form id="loginForm" onsubmit="handleLoginFormSubmit(event)">
             <label for="loginUsername">Username</label>
             <input class="auth-input" type="text" id="loginUsername" placeholder="Enter username" autocomplete="username">
             <label for="loginPassword">Password</label>
             <input class="auth-input" type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password">
-            <button class="auth-btn" onclick="handleLogin()">Sign in</button>
-        </div>
+            <button class="auth-btn" type="submit">Sign in</button>
+        </form>
         <!-- Signup -->
-        <div id="signupForm" style="display:none;">
+        <form id="signupForm" style="display:none;" onsubmit="handleSignupFormSubmit(event)">
             <label for="signupUsername">Username</label>
             <input class="auth-input" type="text" id="signupUsername" placeholder="Alphanumeric, 3-30 chars" autocomplete="username">
             <label for="signupPassword">Password</label>
             <input class="auth-input" type="password" id="signupPassword" placeholder="Minimum 8 characters" autocomplete="new-password">
-            <button class="auth-btn" onclick="handleSignup()">Create account</button>
-        </div>
+            <button class="auth-btn" type="submit">Create account</button>
+        </form>
         <p class="auth-error" id="authError"></p>
     </div>
 </div>
@@ -684,6 +683,6 @@
     <p>Synthesizing market intelligence...</p>
 </div>
 
-<script src="/static/app.js?v=9"></script>
+<script defer src="/static/app.js?v=11"></script>
 </body>
 </html>

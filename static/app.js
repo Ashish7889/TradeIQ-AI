@@ -54,6 +54,28 @@ try {
     currentTheme = "light";
 }
 
+// ========== LAZY LOAD APEXCHARTS ==========
+let apexChartsPromise = null;
+function loadApexCharts() {
+    if (window.ApexCharts) {
+        return Promise.resolve(window.ApexCharts);
+    }
+    if (apexChartsPromise) {
+        return apexChartsPromise;
+    }
+    apexChartsPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/apexcharts@7.1.0/dist/apexcharts.min.js";
+        script.onload = () => resolve(window.ApexCharts);
+        script.onerror = (err) => {
+            apexChartsPromise = null;
+            reject(err);
+        };
+        document.head.appendChild(script);
+    });
+    return apexChartsPromise;
+}
+
 const COMPANY_NAMES = {
     "AAPL": "Apple Inc.",
     "MSFT": "Microsoft Corporation",
@@ -158,6 +180,12 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
         showAuthModal();
     }
+
+    // Auth Form submit handlers
+    const loginFormEl = document.getElementById("loginForm");
+    if (loginFormEl) loginFormEl.addEventListener("submit", handleLoginFormSubmit);
+    const signupFormEl = document.getElementById("signupForm");
+    if (signupFormEl) signupFormEl.addEventListener("submit", handleSignupFormSubmit);
 
     // Search
     const searchBtn = document.getElementById("searchBtn");
@@ -293,6 +321,7 @@ function showApp() {
     document.getElementById("appContainer").style.display = "flex";
     updateUserDisplays(currentUser || "User");
 
+    loadApexCharts();
     loadWatchlist();
     loadPreferences();
     loadAdvisoryWatchlist();
@@ -307,7 +336,18 @@ function switchTab(tab) {
     document.getElementById("authError").innerText = "";
 }
 
-async function handleLogin() {
+function handleLoginFormSubmit(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    handleLogin(e);
+}
+
+function handleSignupFormSubmit(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    handleSignup(e);
+}
+
+async function handleLogin(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     const username = document.getElementById("loginUsername").value.trim();
     const password = document.getElementById("loginPassword").value;
     if (!username || !password) {
@@ -335,7 +375,8 @@ async function handleLogin() {
     }
 }
 
-async function handleSignup() {
+async function handleSignup(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     const username = document.getElementById("signupUsername").value.trim();
     const password = document.getElementById("signupPassword").value;
     if (!username || !password) {
@@ -1357,8 +1398,10 @@ async function handleSearch(ticker) {
 // ========== SECTION A: PRICE CHART FIX ==========
 // Cause of bug: dataLabels was not disabled, causing ApexCharts to print raw float coordinates on every data point.
 // Solution: dataLabels explicitly disabled; clean recreation on render; fmtPrice on axis/tooltip; at most ONE last-price pill annotation.
-function updateChart(data) {
+async function updateChart(data) {
     if (!data || !Array.isArray(data) || data.length === 0) return;
+    await loadApexCharts();
+    if (!window.ApexCharts) return;
     currentPriceHistory = data;
 
     // Dispose old chart cleanly so annotations/markers never accumulate (Item 2)

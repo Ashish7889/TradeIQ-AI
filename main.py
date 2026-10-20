@@ -4,7 +4,7 @@ import time
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 # Load environment variables FIRST before any service imports
@@ -61,14 +61,32 @@ async def add_process_time_header(request: Request, call_next):
 # Ensure static directory exists
 os.makedirs("static", exist_ok=True)
 
+# Cached static files with immutable Cache-Control for versioned assets
+class CachedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code < 400:
+            if path.endswith(".html") or path == "":
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            else:
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
 # Mount the static directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", CachedStaticFiles(directory="static"), name="static")
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    favicon_path = os.path.join("static", "favicon.ico")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/x-icon", headers={"Cache-Control": "public, max-age=86400"})
+    return Response(status_code=404)
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def serve_frontend():
     index_file = os.path.join("static", "index.html")
     if os.path.exists(index_file):
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return {"message": "StockSense QuantCore v3.0 — Institutional Engine Active"}
 
 @app.get("/health")
