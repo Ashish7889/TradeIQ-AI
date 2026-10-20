@@ -28,8 +28,8 @@ _pipeline = StockAnalysisPipeline()
 @limiter.limit("20/minute")
 def search_stock(request: Request, ticker: str = Depends(valid_ticker), db: Session = Depends(get_db)):
     """Validates if ticker exists and fetches basic info."""
-    df = fetch_stock_data(ticker, period="1d", db=db)
-    if df is None:
+    df = fetch_stock_data(ticker, period="5d", db=db)
+    if df is None or df.empty:
         raise HTTPException(status_code=404, detail="Ticker not found or data unavailable")
     return {"message": "Success", "ticker": ticker.upper()}
 

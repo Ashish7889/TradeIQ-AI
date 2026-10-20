@@ -369,6 +369,15 @@ function showApp() {
     loadPreferences();
     loadAdvisoryWatchlist();
     loadAccountDashboard();
+
+    try {
+        const lastTicker = sessionStorage.getItem("tradeiq_last_ticker");
+        if (lastTicker) {
+            const searchInput = document.getElementById("searchInput");
+            if (searchInput) searchInput.value = lastTicker;
+            handleSearch(lastTicker);
+        }
+    } catch (e) {}
 }
 
 function switchAuthFlow(flow) {
@@ -1646,10 +1655,23 @@ async function handleSearch(ticker) {
     showLoading(true);
     try {
         const reqHeaders = authToken ? { "Authorization": `Bearer ${authToken}` } : {};
-        const searchRes = await fetch(`/api/search?ticker=${ticker}`, { headers: reqHeaders });
-        if (!searchRes.ok) throw new Error("Ticker not found or data unavailable");
+
+        // 1. Fetch 1y price history directly (validates ticker and warms 1y cache)
+        const priceRes = await fetch(`/api/stock/${ticker}/price?period=1y`, { headers: reqHeaders });
+        if (!priceRes.ok) {
+            const errData = await priceRes.json().catch(() => ({}));
+            throw new Error(errData.detail || "Ticker not found or data unavailable");
+        }
+        const priceData = await priceRes.json();
+        if (!priceData.data || priceData.data.length === 0) {
+            throw new Error("Ticker not found or data unavailable");
+        }
 
         currentTicker = ticker;
+        try {
+            sessionStorage.setItem("tradeiq_last_ticker", ticker);
+        } catch (e) {}
+
         document.getElementById("welcomeScreen").style.display = "none";
         document.getElementById("displayTicker").innerText = ticker;
         const compEl = document.getElementById("displayCompanyName");
@@ -1658,30 +1680,8 @@ async function handleSearch(ticker) {
         const exportBtn = document.getElementById("exportPdfBtn");
         if (exportBtn) exportBtn.style.display = "inline-flex";
 
-        const [priceData, techData, fundData, sentData, recData] = await Promise.all([
-            fetch(`/api/stock/${ticker}/price?period=1y`, { headers: reqHeaders }).then(r => r.json()),
-            fetch(`/api/stock/${ticker}/technical`, { headers: reqHeaders }).then(r => r.json()),
-            fetch(`/api/stock/${ticker}/fundamental`, { headers: reqHeaders }).then(r => r.json()),
-            fetch(`/api/stock/${ticker}/sentiment`, { headers: reqHeaders }).then(r => { if (!r.ok) return null; return r.json(); }).catch(() => null),
-            fetch(`/api/stock/${ticker}/recommendation`, { headers: reqHeaders }).then(r => {
-                if (r.status === 401) {
-                    handleAuthError();
-                    return null;
-                }
-                return r.json();
-            })
-        ]);
-
+        // Render price chart immediately
         updateChart(priceData.data);
-        updateTechnicals(techData);
-        updateFundamentals(fundData);
-        updateSentiment(sentData);
-        if (recData) updateRecommendation(recData);
-
-        fetch(`/api/stock/${ticker}/backtest`, { headers: reqHeaders })
-            .then(r => r.json())
-            .then(data => updateBacktest(data))
-            .catch(e => console.error("Backtest failed", e));
 
         if (priceData.data && priceData.data.length > 0) {
             const lastCandle = priceData.data[priceData.data.length - 1];
@@ -1705,6 +1705,31 @@ async function handleSearch(ticker) {
                 pctEl.innerText = changeInfo.text;
             }
         }
+
+        // 2. Fetch technicals, fundamentals, sentiment, and recommendation in parallel
+        const [techData, fundData, sentData, recData] = await Promise.all([
+            fetch(`/api/stock/${ticker}/technical`, { headers: reqHeaders }).then(r => r.json()),
+            fetch(`/api/stock/${ticker}/fundamental`, { headers: reqHeaders }).then(r => r.json()),
+            fetch(`/api/stock/${ticker}/sentiment`, { headers: reqHeaders }).then(r => { if (!r.ok) return null; return r.json(); }).catch(() => null),
+            fetch(`/api/stock/${ticker}/recommendation`, { headers: reqHeaders }).then(r => {
+                if (r.status === 401) {
+                    handleAuthError();
+                    return null;
+                }
+                return r.json();
+            })
+        ]);
+
+        updateTechnicals(techData);
+        updateFundamentals(fundData);
+        updateSentiment(sentData);
+        if (recData) updateRecommendation(recData);
+
+        fetch(`/api/stock/${ticker}/backtest`, { headers: reqHeaders })
+            .then(r => r.json())
+            .then(data => updateBacktest(data))
+            .catch(e => console.error("Backtest failed", e));
+
     } catch (error) {
         alert(error.message);
     } finally {
