@@ -21,6 +21,7 @@ import logging
 from datetime import datetime
 
 import requests
+import xml.etree.ElementTree as ET
 import yfinance as yf
 from bs4 import BeautifulSoup
 from langchain_core.output_parsers import JsonOutputParser
@@ -48,26 +49,51 @@ FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 def fetch_news_headlines(ticker: str) -> list[str]:
     """
     Fetches the latest news headlines for a given ticker.
-    Primary source: Yahoo Finance via yfinance.
+    Primary sources: yfinance Search API, Yahoo Finance RSS, Ticker.news.
     Fallback: Finviz web scraper.
     Returns a list of headline strings (used as LangChain Document content).
     """
     ticker = ticker.upper()
     headlines = []
 
-    # Primary: Yahoo Finance
+    # 1. Primary: yfinance Search API
     try:
-        stock = yf.Ticker(ticker)
-        news = stock.news
-        if news:
-            for item in news[:10]:
+        search = yf.Search(ticker, news_count=10)
+        if search.news:
+            for item in search.news:
                 title = item.get("title", "")
                 if title:
                     headlines.append(title)
     except Exception as e:
-        logger.warning(f"Yahoo Finance news fetch failed for {ticker}: {e}")
+        logger.debug(f"yf.Search news fetch failed for {ticker}: {e}")
 
-    # Fallback: Finviz scraper
+    # 2. Secondary: Yahoo Finance RSS Feed
+    if not headlines:
+        try:
+            url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}"
+            r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+            if r.status_code == 200:
+                root = ET.fromstring(r.content)
+                for item in root.findall(".//item/title"):
+                    if item.text:
+                        headlines.append(item.text.strip())
+        except Exception as e:
+            logger.debug(f"Yahoo RSS news fetch failed for {ticker}: {e}")
+
+    # 3. Tertiary: Classic stock.news
+    if not headlines:
+        try:
+            stock = yf.Ticker(ticker)
+            news = stock.news
+            if news:
+                for item in news[:10]:
+                    title = item.get("title", "")
+                    if title:
+                        headlines.append(title)
+        except Exception as e:
+            logger.debug(f"Yahoo Finance Ticker.news fetch failed for {ticker}: {e}")
+
+    # 4. Fallback: Finviz scraper
     if not headlines:
         headlines = _fetch_finviz_news(ticker)
 
