@@ -1657,7 +1657,12 @@ async function handleSearch(ticker) {
         const reqHeaders = authToken ? { "Authorization": `Bearer ${authToken}` } : {};
 
         // 1. Fetch 1y price history directly (validates ticker and warms 1y cache)
-        const priceRes = await fetch(`/api/stock/${ticker}/price?period=1y`, { headers: reqHeaders });
+        let priceRes = await fetch(`/api/stock/${ticker}/price?period=1y`, { headers: reqHeaders });
+        if (!priceRes.ok) {
+            // Quick 600ms automatic retry for cold backend connections / provider warmups
+            await new Promise(r => setTimeout(r, 600));
+            priceRes = await fetch(`/api/stock/${ticker}/price?period=1y`, { headers: reqHeaders });
+        }
         if (!priceRes.ok) {
             const errData = await priceRes.json().catch(() => ({}));
             throw new Error(errData.detail || "Ticker not found or data unavailable");
