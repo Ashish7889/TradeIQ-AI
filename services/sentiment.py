@@ -46,6 +46,7 @@ FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 #  DATA RETRIEVAL LAYER
 # =============================================================================
 
+
 def fetch_news_headlines(ticker: str) -> list[str]:
     """
     Fetches the latest news headlines for a given ticker.
@@ -125,6 +126,7 @@ def _fetch_finviz_news(ticker: str) -> list[str]:
 #  VADER BASELINE SCORER (Algorithmic — No LLM)
 # =============================================================================
 
+
 def score_sentiment_with_vader(headlines: list[str]) -> float:
     """
     Computes a baseline sentiment score using VADER (Valence Aware Dictionary
@@ -143,6 +145,7 @@ def score_sentiment_with_vader(headlines: list[str]) -> float:
 #  FULL SENTIMENT ANALYSIS (used by direct /sentiment API endpoint)
 # =============================================================================
 
+
 def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
     """
     Hybrid Elite Sentiment Engine:
@@ -158,7 +161,7 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
 
         summary_text = " | ".join(headlines[:5])
         vader_score = score_sentiment_with_vader(headlines)
-        
+
         # Default results to VADER baseline
         avg_score = vader_score
         label = "Positive" if avg_score > 0.15 else "Negative" if avg_score < -0.15 else "Neutral"
@@ -177,24 +180,29 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
                     # Short timeout to keep the report fast
                     timeout=10,
                 )
-                prompt = ChatPromptTemplate.from_messages([
-                    ("system", "You are a financial news sentiment analyst. Output ONLY valid JSON."),
-                    ("human", (
-                        "Analyze these news headlines for {ticker} and return JSON:\n"
-                        "{headlines}\n\n"
-                        "Return exactly:\n"
-                        "{{\"sentiment_score\": <float -1.0 to 1.0>, \"sentiment_label\": \"Positive\"|\"Neutral\"|\"Negative\"}}"
-                    )),
-                ])
+                prompt = ChatPromptTemplate.from_messages(
+                    [
+                        ("system", "You are a financial news sentiment analyst. Output ONLY valid JSON."),
+                        (
+                            "human",
+                            (
+                                "Analyze these news headlines for {ticker} and return JSON:\n"
+                                "{headlines}\n\n"
+                                "Return exactly:\n"
+                                '{{"sentiment_score": <float -1.0 to 1.0>, "sentiment_label": "Positive"|"Neutral"|"Negative"}}'
+                            ),
+                        ),
+                    ]
+                )
                 parser = JsonOutputParser()
                 chain = prompt | llm | parser
                 result = chain.invoke({"ticker": ticker, "headlines": summary_text})
-                
+
                 avg_score = float(result.get("sentiment_score", vader_score))
                 label = result.get("sentiment_label", label)
                 source = f"Groq {PRIMARY_MODEL} (Hybrid Refinement)"
                 logger.info(f"[Sentiment] Groq refined {ticker} sentiment.")
-                
+
             except Exception as e:
                 # GRACEFUL FALLBACK: If Groq fails, use VADER.
                 # No crash allowed for the user.
@@ -205,6 +213,7 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
         if db:
             try:
                 from models import SentimentData, Stock
+
                 db_stock = db.query(Stock).filter(Stock.ticker == ticker).first()
                 if db_stock:
                     record = SentimentData(
@@ -224,7 +233,7 @@ def analyze_sentiment(ticker: str, db: Session = None) -> dict | None:
             "sentiment_label": label,
             "summary_text": summary_text,
             "vader_score": round(vader_score, 3),
-            "source": source
+            "source": source,
         }
 
     except Exception as e:

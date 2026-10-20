@@ -60,44 +60,52 @@ def _build_report_chain(model: str = PRIMARY_MODEL):
         temperature=0.05,
         model_kwargs={"response_format": {"type": "json_object"}},
     )
-    
+
     parser = JsonOutputParser(pydantic_object=ReportOutput)
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are QuantCore, an institutional-grade market reasoning engine and senior buy-side analyst. "
-            "You produce precise, evidence-anchored, professional investment research reports. "
-            "CRITICAL RULES: (1) Use only supplied data — never invent metrics, prices, or events. "
-            "(2) Every statement must cite a specific data point from the input. "
-            "(3) Never use filler phrases like 'mixed picture' or 'various factors'. "
-            "(4) If a metric is missing, state it explicitly and reduce confidence accordingly. "
-            "(5) When signals conflict, explain the conflict and default to the risk-controlled view. "
-            "(6) Sentiment score is -1.0 to 1.0 — map to 0-100 for score_breakdown (0.0=50, -1.0=0, 1.0=100). "
-            "(7) final_score must be a weighted composite: Technical 45% + Fundamental 35% + Sentiment 20%. "
-            "(8) confidence_score must reflect signal agreement and data completeness, not just sentiment. "
-            "(9) Do not claim that a win rate below 50% implies negative expected value; expected value also depends on average win vs average loss. Do not state conclusions about statistical significance. "
-            "Output structured JSON only.\n\n"
-            "{format_instructions}"
-        )),
-        ("human", (
-            "Generate a personalized quant research report for the following investment profile.\n\n"
-            "=== INVESTOR PROFILE ===\n"
-            "Risk Level: {risk_level}\n"
-            "Focus Area: {focus_type}\n\n"
-            "=== PORTFOLIO DATA ===\n"
-            "{stock_data}\n\n"
-            "=== INSTITUTIONAL SCORING RULES ===\n"
-            "1. **Sentiment Mapping**: Raw sentiment data is -1.0 to 1.0. You MUST map this to a 0-100 scale in 'score_breakdown'. (0.0 = 50/100, -1.0 = 0/100, 1.0 = 100/100).\n"
-            "2. **Final Score**: 0-100 based on weighted Technical, Fundamental, and Sentiment data.\n\n"
-            "=== REPORT STRUCTURE INSTRUCTIONS ===\n"
-            "1. **Market Overview**: 2-3 direct, data-backed sentences.\n"
-            "2. **Stock Comparison Table**: Markdown pipe table: Ticker | Score | Backtest win rate | Rec | Key Signal.\n"
-            "3. **Top Picks**: Justify using raw numbers from data.\n"
-            "4. **Strategy Backtest**: Reference the 1-year statistical accuracy for the tickers.\n"
-            "5. **Decision Change Triggers**: Explicitly list data points for upgrades/downgrades.\n\n"
-            "Use bolding only for tickers and final conclusions. Do not bold every number. Be direct. Be precise."
-        )),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                (
+                    "You are QuantCore, an institutional-grade market reasoning engine and senior buy-side analyst. "
+                    "You produce precise, evidence-anchored, professional investment research reports. "
+                    "CRITICAL RULES: (1) Use only supplied data — never invent metrics, prices, or events. "
+                    "(2) Every statement must cite a specific data point from the input. "
+                    "(3) Never use filler phrases like 'mixed picture' or 'various factors'. "
+                    "(4) If a metric is missing, state it explicitly and reduce confidence accordingly. "
+                    "(5) When signals conflict, explain the conflict and default to the risk-controlled view. "
+                    "(6) Sentiment score is -1.0 to 1.0 — map to 0-100 for score_breakdown (0.0=50, -1.0=0, 1.0=100). "
+                    "(7) final_score must be a weighted composite: Technical 45% + Fundamental 35% + Sentiment 20%. "
+                    "(8) confidence_score must reflect signal agreement and data completeness, not just sentiment. "
+                    "(9) Do not claim that a win rate below 50% implies negative expected value; expected value also depends on average win vs average loss. Do not state conclusions about statistical significance. "
+                    "Output structured JSON only.\n\n"
+                    "{format_instructions}"
+                ),
+            ),
+            (
+                "human",
+                (
+                    "Generate a personalized quant research report for the following investment profile.\n\n"
+                    "=== INVESTOR PROFILE ===\n"
+                    "Risk Level: {risk_level}\n"
+                    "Focus Area: {focus_type}\n\n"
+                    "=== PORTFOLIO DATA ===\n"
+                    "{stock_data}\n\n"
+                    "=== INSTITUTIONAL SCORING RULES ===\n"
+                    "1. **Sentiment Mapping**: Raw sentiment data is -1.0 to 1.0. You MUST map this to a 0-100 scale in 'score_breakdown'. (0.0 = 50/100, -1.0 = 0/100, 1.0 = 100/100).\n"
+                    "2. **Final Score**: 0-100 based on weighted Technical, Fundamental, and Sentiment data.\n\n"
+                    "=== REPORT STRUCTURE INSTRUCTIONS ===\n"
+                    "1. **Market Overview**: 2-3 direct, data-backed sentences.\n"
+                    "2. **Stock Comparison Table**: Markdown pipe table: Ticker | Score | Backtest win rate | Rec | Key Signal.\n"
+                    "3. **Top Picks**: Justify using raw numbers from data.\n"
+                    "4. **Strategy Backtest**: Reference the 1-year statistical accuracy for the tickers.\n"
+                    "5. **Decision Change Triggers**: Explicitly list data points for upgrades/downgrades.\n\n"
+                    "Use bolding only for tickers and final conclusions. Do not bold every number. Be direct. Be precise."
+                ),
+            ),
+        ]
+    )
 
     chain = prompt | llm
     return chain, parser
@@ -188,7 +196,7 @@ def _process_single_ticker(ticker: str) -> tuple:
         if hasattr(tech_summary, "dict"):
             tech_summary = tech_summary.dict()
 
-        sent_summary = analyze_sentiment(ticker) 
+        sent_summary = analyze_sentiment(ticker)
         if hasattr(sent_summary, "dict"):
             sent_summary = sent_summary.dict()
 
@@ -255,7 +263,7 @@ def generate_user_report(db: Session, current_user: User) -> dict:
     # ── 3. Run Analysis Pipeline Parallelized ───────────────────────────────
     logger.info(f"[Perf] Starting parallel analysis for {len(tickers)} tickers...")
     overall_start = time.time()
-    
+
     with ThreadPoolExecutor(max_workers=min(len(tickers), 10)) as executor:
         future_to_ticker = {executor.submit(_process_single_ticker, ticker): ticker for ticker in tickers}
         for future in as_completed(future_to_ticker):
@@ -274,12 +282,14 @@ def generate_user_report(db: Session, current_user: User) -> dict:
     for model_candidate in [PRIMARY_MODEL, FALLBACK_MODEL]:
         try:
             chain, parser = _build_report_chain(model=model_candidate)
-            ai_msg = chain.invoke({
-                "risk_level": prefs_dict["risk_level"],
-                "focus_type": prefs_dict["focus_type"],
-                "stock_data": json.dumps(stock_analysis_data, indent=2, default=str),
-                "format_instructions": parser.get_format_instructions(),
-            })
+            ai_msg = chain.invoke(
+                {
+                    "risk_level": prefs_dict["risk_level"],
+                    "focus_type": prefs_dict["focus_type"],
+                    "stock_data": json.dumps(stock_analysis_data, indent=2, default=str),
+                    "format_instructions": parser.get_format_instructions(),
+                }
+            )
             raw_text = ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
             result = _parse_report_json(raw_text, parser)
 

@@ -26,6 +26,7 @@ FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 #  LANGCHAIN RECOMMENDATION CHAIN
 # =============================================================================
 
+
 def _build_recommendation_chain(model: str = PRIMARY_MODEL):
     """
     Builds a LangChain chain for BUY/HOLD/SELL recommendation.
@@ -37,35 +38,43 @@ def _build_recommendation_chain(model: str = PRIMARY_MODEL):
         temperature=0.0,
     )
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are an elite Wall Street quantitative analyst. You are brutally honest. "
-            "You do not sugarcoat results. If technical indicators are bearish, you MUST say SELL or HOLD. "
-            "If a P/E ratio is dangerously high, you MUST reflect that. "
-            "You return ONLY valid JSON. No markdown. No commentary outside the JSON."
-        )),
-        ("human", (
-            "Analyze the following data and generate a trading recommendation.\n\n"
-            "Technical Analysis:\n{technical_data}\n\n"
-            "Fundamental Analysis:\n{fundamental_data}\n\n"
-            "News Sentiment:\n{sentiment_data}\n\n"
-            "Return ONLY a JSON object with this EXACT schema:\n"
-            "{{\n"
-            "  \"recommendation\": \"BUY\" | \"HOLD\" | \"SELL\",\n"
-            "  \"confidence_score\": <float 0-100>,\n"
-            "  \"trend_direction\": \"Bullish\" | \"Bearish\" | \"Neutral\",\n"
-            "  \"risk_level\": \"Low\" | \"Medium\" | \"High\",\n"
-            "  \"explanation_text\": \"<3-4 sentences citing exact data points>\",\n"
-            "  \"portfolio_allocation\": \"<e.g. Max 5% Portfolio Weight or 0% (Avoid)>\",\n"
-            "  \"price_prediction\": \"<e.g. 65% Probability of upward trend within 30 days>\",\n"
-            "  \"score_breakdown\": {{\n"
-            "    \"technical\": <float 0-100>,\n"
-            "    \"fundamental\": <float 0-100>,\n"
-            "    \"sentiment\": <float 0-100>\n"
-            "  }}\n"
-            "}}"
-        )),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                (
+                    "You are an elite Wall Street quantitative analyst. You are brutally honest. "
+                    "You do not sugarcoat results. If technical indicators are bearish, you MUST say SELL or HOLD. "
+                    "If a P/E ratio is dangerously high, you MUST reflect that. "
+                    "You return ONLY valid JSON. No markdown. No commentary outside the JSON."
+                ),
+            ),
+            (
+                "human",
+                (
+                    "Analyze the following data and generate a trading recommendation.\n\n"
+                    "Technical Analysis:\n{technical_data}\n\n"
+                    "Fundamental Analysis:\n{fundamental_data}\n\n"
+                    "News Sentiment:\n{sentiment_data}\n\n"
+                    "Return ONLY a JSON object with this EXACT schema:\n"
+                    "{{\n"
+                    '  "recommendation": "BUY" | "HOLD" | "SELL",\n'
+                    '  "confidence_score": <float 0-100>,\n'
+                    '  "trend_direction": "Bullish" | "Bearish" | "Neutral",\n'
+                    '  "risk_level": "Low" | "Medium" | "High",\n'
+                    '  "explanation_text": "<3-4 sentences citing exact data points>",\n'
+                    '  "portfolio_allocation": "<e.g. Max 5% Portfolio Weight or 0% (Avoid)>",\n'
+                    '  "price_prediction": "<e.g. 65% Probability of upward trend within 30 days>",\n'
+                    '  "score_breakdown": {{\n'
+                    '    "technical": <float 0-100>,\n'
+                    '    "fundamental": <float 0-100>,\n'
+                    '    "sentiment": <float 0-100>\n'
+                    "  }}\n"
+                    "}}"
+                ),
+            ),
+        ]
+    )
 
     parser = JsonOutputParser()
     return prompt | llm | parser
@@ -74,6 +83,7 @@ def _build_recommendation_chain(model: str = PRIMARY_MODEL):
 # =============================================================================
 #  PUBLIC FUNCTION
 # =============================================================================
+
 
 def generate_recommendation(technical_data: dict, sentiment_data: dict, fundamental_data: dict) -> dict:
     """
@@ -93,19 +103,28 @@ def generate_recommendation(technical_data: dict, sentiment_data: dict, fundamen
     for model_candidate in [PRIMARY_MODEL, FALLBACK_MODEL]:
         try:
             chain = _build_recommendation_chain(model=model_candidate)
-            result = chain.invoke({
-                "technical_data": json.dumps(technical_data or {}, default=str),
-                "fundamental_data": json.dumps(fundamental_data or {}, default=str),
-                "sentiment_data": json.dumps(sentiment_data or {}, default=str),
-            })
+            result = chain.invoke(
+                {
+                    "technical_data": json.dumps(technical_data or {}, default=str),
+                    "fundamental_data": json.dumps(fundamental_data or {}, default=str),
+                    "sentiment_data": json.dumps(sentiment_data or {}, default=str),
+                }
+            )
 
             required_keys = [
-                "recommendation", "confidence_score", "trend_direction",
-                "risk_level", "explanation_text", "portfolio_allocation",
-                "price_prediction", "score_breakdown"
+                "recommendation",
+                "confidence_score",
+                "trend_direction",
+                "risk_level",
+                "explanation_text",
+                "portfolio_allocation",
+                "price_prediction",
+                "score_breakdown",
             ]
             if all(k in result for k in required_keys):
-                logger.info(f"LangChain recommendation chain succeeded with {model_candidate}: {result['recommendation']}")
+                logger.info(
+                    f"LangChain recommendation chain succeeded with {model_candidate}: {result['recommendation']}"
+                )
                 return result
             else:
                 logger.warning(f"LangChain response with {model_candidate} missing required keys: {result}")
@@ -120,9 +139,8 @@ def generate_recommendation(technical_data: dict, sentiment_data: dict, fundamen
 #  ALGORITHMIC FALLBACK
 # =============================================================================
 
-def _fallback_algorithmic_recommendation(
-    technical_data: dict, sentiment_data: dict, fundamental_data: dict
-) -> dict:
+
+def _fallback_algorithmic_recommendation(technical_data: dict, sentiment_data: dict, fundamental_data: dict) -> dict:
     """
     Deterministic algorithmic fallback.
     Weights: Technical 35%, Fundamental 30%, Sentiment 25%, Risk 10%
@@ -171,7 +189,11 @@ def _fallback_algorithmic_recommendation(
 
     # Fundamental score (30% standard weight)
     fund_score = None
-    if fundamental_data and fundamental_data.get("available", True) and fundamental_data.get("fundamental_score") is not None:
+    if (
+        fundamental_data
+        and fundamental_data.get("available", True)
+        and fundamental_data.get("fundamental_score") is not None
+    ):
         fund_score = float(fundamental_data.get("fundamental_score"))
         if fund_score > 70:
             explanations.append("Strong fundamental metrics.")
@@ -207,7 +229,11 @@ def _fallback_algorithmic_recommendation(
     else:
         rec = "HOLD"
 
-    trend_dir = (technical_data or {}).get("interpretations", {}).get("trend", "Neutral") if technical_data and technical_data.get("available", True) else "Neutral"
+    trend_dir = (
+        (technical_data or {}).get("interpretations", {}).get("trend", "Neutral")
+        if technical_data and technical_data.get("available", True)
+        else "Neutral"
+    )
 
     return {
         "recommendation": rec,

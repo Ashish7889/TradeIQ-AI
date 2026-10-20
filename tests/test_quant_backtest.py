@@ -59,5 +59,3 @@ def test_quant_backtest_consecutive_signals_not_double_counted():
     assert result["available"] is True
     # The 30 trending days should result in at most a single trade entry, not 30 separate signals
     assert result["total_signals"] < 10
-
-

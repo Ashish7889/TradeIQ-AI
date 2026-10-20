@@ -1,10 +1,13 @@
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import models  # noqa: F401
+import schemas
+from app.config import Settings
 from database import Base, get_db
 from limiter import limiter
 from main import app
@@ -115,3 +118,185 @@ def test_endpoint_ticker_validation(client):
     resp = client.get("/api/stock/INVALID$$/sentiment")
     assert resp.status_code == 422
 
+
+def test_unauthorized_endpoints(client):
+    # Endpoints requiring authentication should return 401 without auth header
+    unauth_cases = [
+        ("GET", "/api/watchlist"),
+        ("GET", "/api/user/profile"),
+        ("GET", "/api/preferences"),
+        ("POST", "/api/user/change-password"),
+        ("POST", "/api/report/generate"),
+        ("GET", "/api/stock/AAPL/recommendation"),
+        ("GET", "/api/stock/AAPL/langchain-analysis"),
+    ]
+    for method, path in unauth_cases:
+        if method == "GET":
+            resp = client.get(path)
+        else:
+            resp = client.post(path, json={})
+        assert resp.status_code == 401, f"{method} {path} did not return 401 (got {resp.status_code})"
+
+    # Invalid / forged bearer token should also return 401
+    bad_headers = {"Authorization": "Bearer forged.invalid.token"}
+    resp = client.get("/api/watchlist", headers=bad_headers)
+    assert resp.status_code == 401
+
+
+def test_watchlist_crud_and_cross_user_isolation(client):
+    # Register user 1
+    resp1 = client.post("/api/auth/signup", json={"username": "user_one", "password": "password1234"})
+    assert resp1.status_code == 200
+    token1 = resp1.json()["access_token"]
+    h1 = {"Authorization": f"Bearer {token1}"}
+
+    # Register user 2
+    resp2 = client.post("/api/auth/signup", json={"username": "user_two", "password": "password1234"})
+    assert resp2.status_code == 200
+    token2 = resp2.json()["access_token"]
+    h2 = {"Authorization": f"Bearer {token2}"}
+
+    # User 1 adds AAPL and MSFT
+    assert client.post("/api/watchlist/add", json={"ticker": "AAPL"}, headers=h1).status_code == 200
+    assert client.post("/api/watchlist/add", json={"ticker": "MSFT"}, headers=h1).status_code == 200
+
+    # User 2 watchlist should be empty (cross-user isolation)
+    wl2 = client.get("/api/watchlist", headers=h2).json()
+    assert len(wl2) == 0
+
+    # User 2 adds GOOGL
+    assert client.post("/api/watchlist/add", json={"ticker": "GOOGL"}, headers=h2).status_code == 200
+
+    # Verify User 1 sees AAPL and MSFT, not GOOGL
+    wl1 = client.get("/api/watchlist", headers=h1).json()
+    tickers1 = [item["ticker"] for item in wl1]
+    assert "AAPL" in tickers1
+    assert "MSFT" in tickers1
+    assert "GOOGL" not in tickers1
+
+    # User 1 deletes AAPL
+    del_resp = client.delete("/api/watchlist/AAPL", headers=h1)
+    assert del_resp.status_code == 200
+
+    wl1_after = client.get("/api/watchlist", headers=h1).json()
+    tickers1_after = [item["ticker"] for item in wl1_after]
+    assert "AAPL" not in tickers1_after
+    assert "MSFT" in tickers1_after
+
+    # User 1 deletes non-existent ticker returns 404
+    assert client.delete("/api/watchlist/TSLA", headers=h1).status_code == 404
+
+    # User 2 still has GOOGL unaffected
+    wl2_check = client.get("/api/watchlist", headers=h2).json()
+    assert [item["ticker"] for item in wl2_check] == ["GOOGL"]
+
+    # User 1 clears their watchlist
+    clear_resp = client.delete("/api/watchlist", headers=h1)
+    assert clear_resp.status_code == 200
+    assert len(client.get("/api/watchlist", headers=h1).json()) == 0
+
+    # User 2's watchlist remains intact
+    assert len(client.get("/api/watchlist", headers=h2).json()) == 1
+
+
+def test_change_password_validation(client):
+    # Register user
+    signup_resp = client.post("/api/auth/signup", json={"username": "pwd_tester", "password": "initialPassword123"})
+    assert signup_resp.status_code == 200
+    token = signup_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Wrong current password returns 400
+    resp_wrong = client.post(
+        "/api/user/change-password",
+        json={"current_password": "wrongpassword123", "new_password": "newpassword1234"},
+        headers=headers,
+    )
+    assert resp_wrong.status_code == 400
+
+    # 2. New password too short (< 8 chars) returns 422
+    resp_short = client.post(
+        "/api/user/change-password",
+        json={"current_password": "initialPassword123", "new_password": "short"},
+        headers=headers,
+    )
+    assert resp_short.status_code == 422
+
+    # 3. New password too long (> 128 chars) returns 422
+    resp_long = client.post(
+        "/api/user/change-password",
+        json={"current_password": "initialPassword123", "new_password": "a" * 129},
+        headers=headers,
+    )
+    assert resp_long.status_code == 422
+
+    # 4. Valid password change returns 200
+    resp_success = client.post(
+        "/api/user/change-password",
+        json={"current_password": "initialPassword123", "new_password": "newSuperPassword456"},
+        headers=headers,
+    )
+    assert resp_success.status_code == 200
+
+    # 5. Old password no longer authenticates
+    old_login = client.post(
+        "/api/auth/login",
+        data={"username": "pwd_tester", "password": "initialPassword123"},
+    )
+    assert old_login.status_code == 401
+
+    # 6. New password authenticates successfully
+    new_login = client.post(
+        "/api/auth/login",
+        data={"username": "pwd_tester", "password": "newSuperPassword456"},
+    )
+    assert new_login.status_code == 200
+
+
+def test_input_max_length_constraints(client):
+    # Signup password exceeding 128 characters returns 422
+    resp = client.post(
+        "/api/auth/signup",
+        json={"username": "valid_user", "password": "p" * 129},
+    )
+    assert resp.status_code == 422
+
+    # UserLogin schema validation rejects password > 128 characters
+    with pytest.raises(ValidationError):
+        schemas.UserLogin(username="valid_user", password="p" * 129)
+
+    # UserCreate schema validation rejects password > 128 characters
+    with pytest.raises(ValidationError):
+        schemas.UserCreate(username="valid_user", password="p" * 129)
+
+    # ChangePasswordIn schema validation rejects current_password or new_password > 128 characters
+    with pytest.raises(ValidationError):
+        schemas.ChangePasswordIn(current_password="p" * 129, new_password="validpassword123")
+    with pytest.raises(ValidationError):
+        schemas.ChangePasswordIn(current_password="validpassword123", new_password="p" * 129)
+
+    # Langchain query param user_question exceeding 500 characters returns 422
+    signup = client.post("/api/auth/signup", json={"username": "query_tester", "password": "password123"})
+    token = signup.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    overlong_q = "q" * 501
+    resp_q = client.get(f"/api/stock/AAPL/langchain-analysis?user_question={overlong_q}", headers=headers)
+    assert resp_q.status_code == 422
+
+
+def test_secret_key_validation():
+    # Empty SECRET_KEY should raise ValidationError
+    with pytest.raises(ValidationError):
+        Settings(SECRET_KEY="")
+
+    # Too short (< 16 chars) SECRET_KEY should raise ValidationError
+    with pytest.raises(ValidationError):
+        Settings(SECRET_KEY="short_key_123")
+
+    # Insecure default SECRET_KEY should raise ValidationError
+    with pytest.raises(ValidationError):
+        Settings(SECRET_KEY="super_secret_key_for_stocksense")
+
+    # Valid secret key initializes properly
+    valid_settings = Settings(SECRET_KEY="a_secure_random_key_of_sufficient_length_32chars")
+    assert valid_settings.SECRET_KEY == "a_secure_random_key_of_sufficient_length_32chars"

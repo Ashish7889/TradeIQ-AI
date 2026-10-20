@@ -8,7 +8,7 @@ from database import Base
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
@@ -16,9 +16,10 @@ class User(Base):
     preferences = relationship("UserPreference", back_populates="user", uselist=False)
     watchlist = relationship("Watchlist", back_populates="user")
 
+
 class UserPreference(Base):
     __tablename__ = "user_preferences"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
     risk_level = Column(String, default="Medium")
@@ -29,6 +30,7 @@ class UserPreference(Base):
 
     user = relationship("User", back_populates="preferences")
 
+
 class Stock(Base):
     __tablename__ = "stocks"
 
@@ -37,6 +39,7 @@ class Stock(Base):
     company_name = Column(String)
     last_price = Column(Float, nullable=True)
     last_updated = Column(DateTime, default=datetime.datetime.utcnow)
+
 
 class TechnicalSignal(Base):
     __tablename__ = "technical_signals"
@@ -50,6 +53,7 @@ class TechnicalSignal(Base):
     sma200 = Column(Float, nullable=True)
     volatility = Column(Float, nullable=True)
 
+
 class SentimentData(Base):
     __tablename__ = "sentiment_data"
 
@@ -60,6 +64,7 @@ class SentimentData(Base):
     headline = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
+
 class Watchlist(Base):
     __tablename__ = "watchlist"
 
@@ -69,13 +74,14 @@ class Watchlist(Base):
 
     user = relationship("User", back_populates="watchlist")
 
+
 class Recommendation(Base):
     __tablename__ = "recommendations"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     stock_id = Column(Integer, ForeignKey("stocks.id"), unique=True)
-    recommendation = Column(String) # BUY / HOLD / SELL
-    confidence_score = Column(Float) # 0-100
+    recommendation = Column(String)  # BUY / HOLD / SELL
+    confidence_score = Column(Float)  # 0-100
     trend_direction = Column(String)
     risk_level = Column(String)
     explanation_text = Column(Text)

@@ -43,23 +43,24 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 # --- APM Observability Middleware ---
 logger = logging.getLogger("stocksense.apm")
 
+
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
-    
+
     # Structured log for observability (Datadog/ELK ready)
     logger.info(
-        f"[APM] {request.method} {request.url.path} | "
-        f"Status: {response.status_code} | "
-        f"Latency: {process_time:.4f}s"
+        f"[APM] {request.method} {request.url.path} | Status: {response.status_code} | Latency: {process_time:.4f}s"
     )
     return response
 
+
 # Ensure static directory exists
 os.makedirs("static", exist_ok=True)
+
 
 # Cached static files with immutable Cache-Control for versioned assets
 class CachedStaticFiles(StaticFiles):
@@ -72,8 +73,10 @@ class CachedStaticFiles(StaticFiles):
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
 
+
 # Mount the static directory
 app.mount("/static", CachedStaticFiles(directory="static"), name="static")
+
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
@@ -82,12 +85,14 @@ def favicon():
         return FileResponse(favicon_path, media_type="image/x-icon", headers={"Cache-Control": "public, max-age=86400"})
     return Response(status_code=404)
 
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def serve_frontend():
     index_file = os.path.join("static", "index.html")
     if os.path.exists(index_file):
         return FileResponse(index_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return {"message": "StockSense QuantCore v3.0 — Institutional Engine Active"}
+
 
 @app.get("/health")
 def health_check():
@@ -97,6 +102,7 @@ def health_check():
         "pipeline": "QuantCore Sequential Pipeline",
         "llm": "QuantCore 3.0 (Institutional Tier)",
     }
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

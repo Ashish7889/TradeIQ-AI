@@ -14,7 +14,7 @@ def test_parse_report_json_valid():
         "recommendation": "BUY",
         "confidence_score": 85,
         "strategy_accuracy": 68.5,
-        "decision_triggers": ["RSI below 40"]
+        "decision_triggers": ["RSI below 40"],
     }
     raw = json.dumps(valid_data)
     parsed = _parse_report_json(raw, parser)
@@ -32,7 +32,7 @@ def test_parse_report_json_fenced_markdown():
         "recommendation": "HOLD",
         "confidence_score": 50,
         "strategy_accuracy": 55.0,
-        "decision_triggers": []
+        "decision_triggers": [],
     }
     raw = f"```json\n{json.dumps(valid_data)}\n```"
     parsed = _parse_report_json(raw, parser)
@@ -52,7 +52,7 @@ def test_parse_report_json_unstructured_fallback():
 def test_ticker_extraction_from_dict():
     stock_analysis_data = {
         "AMZN": {"Technicals": {}, "Fundamentals": {}},
-        "MSFT": {"Technicals": {}, "Fundamentals": {}}
+        "MSFT": {"Technicals": {}, "Fundamentals": {}},
     }
     tickers = list(stock_analysis_data.keys())
     assert tickers == ["AMZN", "MSFT"]

@@ -102,10 +102,7 @@ def calculate_risk_metrics(df: pd.DataFrame, risk_free_rate: float = 0.05) -> di
                 bench_idx = bench_idx.tz_localize(None)
             bench_aligned.index = bench_idx.normalize()
 
-            combined = pd.DataFrame({
-                "stock": stock_aligned,
-                "bench": bench_aligned
-            }).dropna()
+            combined = pd.DataFrame({"stock": stock_aligned, "bench": bench_aligned}).dropna()
 
             if len(combined) > 20:
                 slope, _, _, _, _ = stats.linregress(combined["bench"], combined["stock"])
@@ -138,9 +135,7 @@ def calculate_risk_metrics(df: pd.DataFrame, risk_free_rate: float = 0.05) -> di
             calmar = None
 
         # ── 8. Risk Grading ───────────────────────────────────────────────────
-        risk_grade, risk_summary, risk_score, evidence = _grade_risk(
-            annualized_vol, var_95, beta, sharpe, max_drawdown
-        )
+        risk_grade, risk_summary, risk_score, evidence = _grade_risk(annualized_vol, var_95, beta, sharpe, max_drawdown)
 
         return {
             "risk_score": risk_score,
@@ -172,9 +167,11 @@ def _grade_risk(vol: float, var_95: float, beta: float, sharpe: float, drawdown:
 
     # ── Volatility (30 pts) ──────────────────────────
     evidence.append(f"Annualized Volatility is {vol}%.")
-    if vol < 15: total_score += 30
-    elif vol < 25: total_score += 20
-    elif vol < 40: 
+    if vol < 15:
+        total_score += 30
+    elif vol < 25:
+        total_score += 20
+    elif vol < 40:
         total_score += 10
         evidence.append("Volatility is elevated (Higher than S&P 500 average of ~16%).")
     else:
@@ -182,37 +179,49 @@ def _grade_risk(vol: float, var_95: float, beta: float, sharpe: float, drawdown:
 
     # ── Sharpe Ratio (30 pts) ────────────────────────
     evidence.append(f"Sharpe Ratio (Risk-Adjusted Return) is {sharpe}.")
-    if sharpe > 1.5: total_score += 30
-    elif sharpe > 0.5: total_score += 15
-    elif sharpe < 0: 
+    if sharpe > 1.5:
+        total_score += 30
+    elif sharpe > 0.5:
+        total_score += 15
+    elif sharpe < 0:
         evidence.append("Negative Sharpe Ratio: Returns do not justify the risk taken.")
 
     # ── Max Drawdown (20 pts) ────────────────────────
     evidence.append(f"Maximum Drawdown is {drawdown}%.")
-    if drawdown > -15: total_score += 20
-    elif drawdown > -30: total_score += 10
+    if drawdown > -15:
+        total_score += 20
+    elif drawdown > -30:
+        total_score += 10
     else:
         evidence.append("Significant downside exposure (Drawdown > 30%).")
 
     # ── Beta (20 pts) ────────────────────────────────
     if beta is not None:
         evidence.append(f"Beta vs S&P 500 is {beta}.")
-        if 0.5 <= beta <= 1.3: total_score += 20
-        elif beta > 1.5: 
+        if 0.5 <= beta <= 1.3:
+            total_score += 20
+        elif beta > 1.5:
             evidence.append(f"High sensitivity: Stock is {beta}x as volatile as the market.")
         elif beta < 0.3:
             evidence.append("Low correlation: Defensive or non-market correlated asset.")
 
     # Map score to grade
-    if total_score >= 80: grade = "A"
-    elif total_score >= 60: grade = "B"
-    elif total_score >= 40: grade = "C"
-    elif total_score >= 20: grade = "D"
-    else: grade = "F"
+    if total_score >= 80:
+        grade = "A"
+    elif total_score >= 60:
+        grade = "B"
+    elif total_score >= 40:
+        grade = "C"
+    elif total_score >= 20:
+        grade = "D"
+    else:
+        grade = "F"
 
     summary = f"Risk Score: {total_score}/100. Grade: {grade}. "
-    if grade in ["A", "B"]: summary += "Suitable for conservative/institutional risk profiles."
-    else: summary += "High-risk profile. Frequent monitoring required."
+    if grade in ["A", "B"]:
+        summary += "Suitable for conservative/institutional risk profiles."
+    else:
+        summary += "High-risk profile. Frequent monitoring required."
 
     return grade, summary, total_score, evidence
 

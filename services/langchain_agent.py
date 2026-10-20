@@ -50,7 +50,6 @@ PRIMARY_MODEL = settings.GROQ_MODEL
 FALLBACK_MODEL = settings.GROQ_FALLBACK_MODEL
 
 
-
 def invoke_with_retry(chain, inputs: dict, max_retries: int = 3, base_delay: float = 5.0):
     """
     Invokes a LangChain chain with exponential backoff retry.
@@ -63,19 +62,16 @@ def invoke_with_retry(chain, inputs: dict, max_retries: int = 3, base_delay: flo
             return chain.invoke(inputs)
         except Exception as e:
             err_str = str(e).lower()
-            is_quota = any(kw in err_str for kw in [
-                "resource_exhausted", "429", "quota", "rate_limit", "rate limit"
-            ])
+            is_quota = any(kw in err_str for kw in ["resource_exhausted", "429", "quota", "rate_limit", "rate limit"])
             if is_quota:
-                wait = base_delay * (2 ** attempt)   # 5s → 10s → 20s
+                wait = base_delay * (2**attempt)  # 5s → 10s → 20s
                 logger.warning(
-                    f"[QuantCore] Rate limit hit (attempt {attempt+1}/{max_retries}). "
-                    f"Retrying in {wait:.0f}s..."
+                    f"[QuantCore] Rate limit hit (attempt {attempt + 1}/{max_retries}). Retrying in {wait:.0f}s..."
                 )
                 time.sleep(wait)
                 last_error = e
             else:
-                raise   # non-quota errors bubble up immediately
+                raise  # non-quota errors bubble up immediately
     raise last_error  # all retries exhausted
 
 
@@ -83,29 +79,38 @@ def invoke_with_retry(chain, inputs: dict, max_retries: int = 3, base_delay: flo
 #  STAGE 4 HELPER — Sentiment LangChain (only LLM stage before QuantCore)
 # =============================================================================
 
+
 def _build_sentiment_chain(model: str = PRIMARY_MODEL):
     llm = ChatGroq(
         model=model,
         api_key=GROQ_API_KEY,
         temperature=0.0,
     )
-    sentiment_prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are a senior financial news analyst specializing in quantitative sentiment scoring. "
-            "You analyze news headlines with extreme precision. "
-            "Output ONLY valid JSON. No markdown. No explanation outside the JSON."
-        )),
-        ("human", (
-            "Analyze the following recent news headlines for the stock ticker: {ticker}\n\n"
-            "Headlines:\n{headlines}\n\n"
-            "Return ONLY this JSON:\n"
-            "{{\n"
-            "  \"sentiment_score\": <float -1.0 to 1.0>,\n"
-            "  \"sentiment_label\": \"Positive\" | \"Neutral\" | \"Negative\",\n"
-            "  \"reasoning\": \"<1-2 sentence explanation citing specific headlines>\"\n"
-            "}}"
-        ))
-    ])
+    sentiment_prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                (
+                    "You are a senior financial news analyst specializing in quantitative sentiment scoring. "
+                    "You analyze news headlines with extreme precision. "
+                    "Output ONLY valid JSON. No markdown. No explanation outside the JSON."
+                ),
+            ),
+            (
+                "human",
+                (
+                    "Analyze the following recent news headlines for the stock ticker: {ticker}\n\n"
+                    "Headlines:\n{headlines}\n\n"
+                    "Return ONLY this JSON:\n"
+                    "{{\n"
+                    '  "sentiment_score": <float -1.0 to 1.0>,\n'
+                    '  "sentiment_label": "Positive" | "Neutral" | "Negative",\n'
+                    '  "reasoning": "<1-2 sentence explanation citing specific headlines>"\n'
+                    "}}"
+                ),
+            ),
+        ]
+    )
     return sentiment_prompt | llm | JsonOutputParser()
 
 
@@ -293,16 +298,19 @@ def _build_synthesis_chain(model: str = PRIMARY_MODEL):
         api_key=GROQ_API_KEY,
         temperature=0.05,
     )
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", QUANTCORE_SYSTEM),
-        ("human", QUANTCORE_HUMAN),
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", QUANTCORE_SYSTEM),
+            ("human", QUANTCORE_HUMAN),
+        ]
+    )
     return prompt | llm | JsonOutputParser()
 
 
 # =============================================================================
 #  MAIN PIPELINE — StockAnalysisPipeline
 # =============================================================================
+
 
 class StockAnalysisPipeline:
     """
@@ -345,9 +353,14 @@ class StockAnalysisPipeline:
 
         logger.info(f"[QuantCore] Running synthesis for {ticker}")
         quantcore_output = self._stage7_quantcore(
-            ticker=ticker, user_prefs=user_prefs,
-            stage1=stage1, stage2=stage2, stage3=stage3,
-            stage4=stage4, stage5=stage5, stage6=stage6,
+            ticker=ticker,
+            user_prefs=user_prefs,
+            stage1=stage1,
+            stage2=stage2,
+            stage3=stage3,
+            stage4=stage4,
+            stage5=stage5,
+            stage6=stage6,
             user_question=user_question,
         )
 
@@ -377,14 +390,16 @@ class StockAnalysisPipeline:
             prev = df.iloc[-2] if len(df) > 1 else latest
             chg = ((float(latest["Close"]) - float(prev["Close"])) / float(prev["Close"])) * 100
             return {
-                "status": "ok", "ticker": ticker,
+                "status": "ok",
+                "ticker": ticker,
                 "current_price": round(float(latest["Close"]), 2),
                 "previous_close": round(float(prev["Close"]), 2),
                 "price_change_pct": round(chg, 2),
                 "52w_high": round(float(df["High"].max()), 2),
                 "52w_low": round(float(df["Low"].min()), 2),
                 "avg_volume_30d": int(df["Volume"].tail(30).mean()),
-                "data_points": len(df), "period": "1 Year",
+                "data_points": len(df),
+                "period": "1 Year",
                 "_dataframe": df,
             }
         except Exception as e:
@@ -416,8 +431,14 @@ class StockAnalysisPipeline:
         try:
             headlines_list = fetch_news_headlines(ticker)
             if not headlines_list:
-                return {"status": "no_data", "sentiment_score": 0.0, "sentiment_label": "Neutral",
-                        "reasoning": "No news headlines found.", "vader_score": 0.0, "sources_count": 0}
+                return {
+                    "status": "no_data",
+                    "sentiment_score": 0.0,
+                    "sentiment_label": "Neutral",
+                    "reasoning": "No news headlines found.",
+                    "vader_score": 0.0,
+                    "sources_count": 0,
+                }
 
             vader_score = score_sentiment_with_vader(headlines_list)
             headlines_text = "\n".join([f"• {h}" for h in headlines_list])
@@ -441,14 +462,24 @@ class StockAnalysisPipeline:
                 headlines_list = fetch_news_headlines(ticker)
                 vader_score = score_sentiment_with_vader(headlines_list) if headlines_list else 0.0
                 label = "Positive" if vader_score > 0.15 else "Negative" if vader_score < -0.15 else "Neutral"
-                return {"status": "vader_fallback", "sentiment_score": round(vader_score, 3),
-                        "sentiment_label": label, "reasoning": "VADER fallback used.",
-                        "vader_score": round(vader_score, 3),
-                        "sources_count": len(headlines_list) if headlines_list else 0}
+                return {
+                    "status": "vader_fallback",
+                    "sentiment_score": round(vader_score, 3),
+                    "sentiment_label": label,
+                    "reasoning": "VADER fallback used.",
+                    "vader_score": round(vader_score, 3),
+                    "sources_count": len(headlines_list) if headlines_list else 0,
+                }
             except Exception as e2:
                 logger.exception(f"Stage 4 fallback error: {e2}")
-                return {"status": "error", "sentiment_score": 0.0, "sentiment_label": "Neutral",
-                        "reasoning": str(e2), "vader_score": 0.0, "sources_count": 0}
+                return {
+                    "status": "error",
+                    "sentiment_score": 0.0,
+                    "sentiment_label": "Neutral",
+                    "reasoning": str(e2),
+                    "vader_score": 0.0,
+                    "sources_count": 0,
+                }
 
     def _stage5_risk(self, df) -> dict:
         try:
@@ -469,7 +500,9 @@ class StockAnalysisPipeline:
             logger.exception(f"Stage 6 backtest failed: {e}")
             return {"status": "error", "message": str(e)}
 
-    def _stage7_quantcore(self, ticker, user_prefs, stage1, stage2, stage3, stage4, stage5, stage6, user_question: str = "") -> dict:
+    def _stage7_quantcore(
+        self, ticker, user_prefs, stage1, stage2, stage3, stage4, stage5, stage6, user_question: str = ""
+    ) -> dict:
         payload = {
             "ticker": ticker,
             "user_prefs": json.dumps(user_prefs, indent=2),
@@ -487,7 +520,9 @@ class StockAnalysisPipeline:
             return invoke_with_retry(self.synthesis_chain, payload, max_retries=3, base_delay=5.0)
         except Exception as primary_err:
             last_err = primary_err
-            logger.warning(f"[QuantCore] Primary model failed ({PRIMARY_MODEL}): {primary_err}. Trying fallback model {FALLBACK_MODEL}...")
+            logger.warning(
+                f"[QuantCore] Primary model failed ({PRIMARY_MODEL}): {primary_err}. Trying fallback model {FALLBACK_MODEL}..."
+            )
             try:
                 # Build a fresh chain on fallback model and retry once
                 fallback_chain = _build_synthesis_chain(model=FALLBACK_MODEL)
@@ -498,16 +533,21 @@ class StockAnalysisPipeline:
             return {
                 "error": str(last_err),
                 "portfolio_summary": {
-                    "market_regime": "Unknown", "overall_bias": "Neutral",
-                    "top_opportunity": ticker, "biggest_risk": "Synthesis failed",
-                    "one_line_thesis": "Analysis incomplete.", "confidence": 0
+                    "market_regime": "Unknown",
+                    "overall_bias": "Neutral",
+                    "top_opportunity": ticker,
+                    "biggest_risk": "Synthesis failed",
+                    "one_line_thesis": "Analysis incomplete.",
+                    "confidence": 0,
                 },
-                "stocks": [], "ranked_watchlist": [],
+                "stocks": [],
+                "ranked_watchlist": [],
                 "portfolio_actions": {
-                    "best_action_now": "Retry analysis", "avoid_now": "All positions",
-                    "watch_for_next": ticker
+                    "best_action_now": "Retry analysis",
+                    "avoid_now": "All positions",
+                    "watch_for_next": ticker,
                 },
-                "ai_disclaimer": "Synthesis failed. Do not use for investment decisions."
+                "ai_disclaimer": "Synthesis failed. Do not use for investment decisions.",
             }
 
     def _build_report_text(self, quantcore_output: dict, ticker: str) -> str:
@@ -561,7 +601,9 @@ class StockAnalysisPipeline:
             if watchlist:
                 lines.append("\n### Ranked Watchlist")
                 for item in watchlist:
-                    lines.append(f"- **#{item.get('rank')} {item.get('ticker')}** ({item.get('decision','N/A')}, {item.get('score', 0)}/100): {item.get('why_it_ranks_here', '')}")
+                    lines.append(
+                        f"- **#{item.get('rank')} {item.get('ticker')}** ({item.get('decision', 'N/A')}, {item.get('score', 0)}/100): {item.get('why_it_ranks_here', '')}"
+                    )
 
             lines.append(f"\n*{quantcore_output.get('ai_disclaimer', '')}*")
             return "\n".join(lines)
@@ -571,8 +613,14 @@ class StockAnalysisPipeline:
 
     def _extract_recommendation(self, quantcore_output: dict, tech, fund, sent, risk) -> dict:
         """Extracts recommendation from QuantCore output, with algorithmic fallback."""
-        DECISION_MAP = {"STRONG_BUY": "BUY", "BUY": "BUY", "HOLD": "HOLD",
-                        "REDUCE": "SELL", "SELL": "SELL", "AVOID": "SELL"}
+        DECISION_MAP = {
+            "STRONG_BUY": "BUY",
+            "BUY": "BUY",
+            "HOLD": "HOLD",
+            "REDUCE": "SELL",
+            "SELL": "SELL",
+            "AVOID": "SELL",
+        }
         try:
             stocks = quantcore_output.get("stocks", [])
             if stocks:
@@ -587,13 +635,14 @@ class StockAnalysisPipeline:
                 risk_score = {"A": 90, "B": 75, "C": 55, "D": 35, "F": 15}.get((risk or {}).get("risk_grade", "C"), 50)
 
                 return {
-                    "action": action, "confidence": confidence,
+                    "action": action,
+                    "confidence": confidence,
                     "breakdown": {
                         "technical": round(float(tech_val if tech_val is not None else 50.0), 1),
                         "fundamental": round(float(fund_val if fund_val is not None else 50.0), 1),
                         "sentiment": round(sent_pct, 1),
                         "risk": round(float(risk_score), 1),
-                    }
+                    },
                 }
         except Exception as e:
             logger.warning(f"QuantCore extraction fallback triggered: {e}")
@@ -618,11 +667,12 @@ class StockAnalysisPipeline:
         action = "BUY" if final_score >= 62 else "SELL" if final_score <= 42 else "HOLD"
 
         return {
-            "action": action, "confidence": round(final_score, 1),
+            "action": action,
+            "confidence": round(final_score, 1),
             "breakdown": {
                 "technical": round(float(tech_val if tech_val is not None else 50.0), 1),
                 "fundamental": round(float(fund_val if fund_val is not None else 50.0), 1),
                 "sentiment": round(sent_pct, 1),
                 "risk": round(float(risk_score), 1),
-            }
+            },
         }

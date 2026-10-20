@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 market_data_cache = TTLCache(maxsize=200, ttl=900)
 _cache_lock = threading.Lock()
 
+
 def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
     """
     Fetches historical OHLCV data for a ticker using yfinance.
@@ -22,7 +23,7 @@ def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
     """
     ticker = ticker.upper()
     cache_key = f"{ticker}_{period}"
-    
+
     try:
         # Check cache first with lock
         with _cache_lock:
@@ -38,16 +39,16 @@ def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
             logger.info(f"[Cache Miss] Fetching data for {cache_key} from Yahoo Finance")
             stock = yf.Ticker(ticker)
             df = stock.history(period=period)
-            
+
             if df.empty:
                 logger.warning(f"No data found for {ticker}")
                 return None
-            
+
             df.reset_index(inplace=True)
             # Ensure 'Date' column is timezone-naive or normalized
-            if 'Date' in df.columns and df['Date'].dt.tz is not None:
-                 df['Date'] = df['Date'].dt.tz_convert(None)
-                 
+            if "Date" in df.columns and df["Date"].dt.tz is not None:
+                df["Date"] = df["Date"].dt.tz_convert(None)
+
             # Store in cache with lock
             with _cache_lock:
                 market_data_cache[cache_key] = df.copy()
@@ -63,20 +64,17 @@ def fetch_stock_data(ticker: str, period: str = "1y", db: Session = None):
                 except Exception as info_err:
                     logger.warning(f"Could not fetch company name for {ticker}: {info_err}")
                     company_name = ticker
-                    
+
                 db_stock = Stock(
-                    ticker=ticker,
-                    company_name=company_name,
-                    last_price=last_price,
-                    last_updated=datetime.utcnow()
+                    ticker=ticker, company_name=company_name, last_price=last_price, last_updated=datetime.utcnow()
                 )
                 db.add(db_stock)
             else:
                 db_stock.last_price = last_price
                 db_stock.last_updated = datetime.utcnow()
-            
+
             db.commit()
-            
+
         return df
     except Exception as e:
         logger.exception(f"Error fetching data for {ticker}: {e}")

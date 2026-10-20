@@ -4,30 +4,31 @@ import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
+
 def evaluate_fundamentals(ticker: str):
     ticker = ticker.upper()
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        
+
         if not info:
             return {
                 "available": False,
                 "fundamental_score": None,
                 "numerical_evidence": ["Fundamental data unavailable."],
-                "metrics": None
+                "metrics": None,
             }
-             
+
         # Extract metrics
-        pe_ratio = info.get('trailingPE') or info.get('forwardPE', 0)
-        eps = info.get('trailingEps', 0)
-        revenue_growth = info.get('revenueGrowth', 0)
-        profit_margins = info.get('profitMargins', 0)
-        debt_to_equity = info.get('debtToEquity', 0)
-        
+        pe_ratio = info.get("trailingPE") or info.get("forwardPE", 0)
+        eps = info.get("trailingEps", 0)
+        revenue_growth = info.get("revenueGrowth", 0)
+        profit_margins = info.get("profitMargins", 0)
+        debt_to_equity = info.get("debtToEquity", 0)
+
         evidence = []
-        score = 50 # Base score
-        
+        score = 50  # Base score
+
         # ── PE Ratio ────────────────────────────────
         if pe_ratio:
             evidence.append(f"P/E Ratio is {pe_ratio:.2f}.")
@@ -36,12 +37,13 @@ def evaluate_fundamentals(ticker: str):
             elif pe_ratio > 35:
                 score -= 10
                 evidence.append("P/E Ratio is high compared to historical sector averages.")
-        
+
         # ── EPS ─────────────────────────────────────
         if eps:
             evidence.append(f"Trailing EPS is ${eps:.2f}.")
-            if eps > 0: score += 10
-            else: 
+            if eps > 0:
+                score += 10
+            else:
                 score -= 15
                 evidence.append("Company is currently reporting negative earnings (diluted EPS).")
 
@@ -49,8 +51,9 @@ def evaluate_fundamentals(ticker: str):
         if revenue_growth:
             growth_pct = revenue_growth * 100
             evidence.append(f"Revenue Growth is {growth_pct:.1f}%.")
-            if revenue_growth > 0.15: score += 15
-            elif revenue_growth < 0: 
+            if revenue_growth > 0.15:
+                score += 15
+            elif revenue_growth < 0:
                 score -= 10
                 evidence.append("Revenue is shrinking year-over-year.")
 
@@ -58,20 +61,23 @@ def evaluate_fundamentals(ticker: str):
         if profit_margins:
             margin_pct = profit_margins * 100
             evidence.append(f"Profit Margin is {margin_pct:.1f}%.")
-            if profit_margins > 0.20: score += 10
-            elif profit_margins < 0.05: score -= 5
+            if profit_margins > 0.20:
+                score += 10
+            elif profit_margins < 0.05:
+                score -= 5
 
         # ── Debt to Equity ──────────────────────────
         if debt_to_equity:
             evidence.append(f"Debt-to-Equity Ratio is {debt_to_equity:.2f}.")
-            if debt_to_equity < 50: score += 5
-            elif debt_to_equity > 150: 
+            if debt_to_equity < 50:
+                score += 5
+            elif debt_to_equity > 150:
                 score -= 10
                 evidence.append("High leverage detected (D/E > 1.5).")
 
         # Bounds check
         score = max(0, min(100, score))
-        
+
         return {
             "available": True,
             "fundamental_score": score,
@@ -81,15 +87,10 @@ def evaluate_fundamentals(ticker: str):
                 "eps": round(eps, 2) if eps else None,
                 "revenue_growth": round(revenue_growth, 4) if revenue_growth else None,
                 "profit_margins": round(profit_margins, 4) if profit_margins else None,
-                "debt_to_equity": round(debt_to_equity, 2) if debt_to_equity else None
-            }
+                "debt_to_equity": round(debt_to_equity, 2) if debt_to_equity else None,
+            },
         }
-        
+
     except Exception as e:
         logger.error(f"Error fetching fundamentals for {ticker}: {e}")
-        return {
-            "available": False,
-            "fundamental_score": None,
-            "numerical_evidence": [f"Error: {e!s}"],
-            "metrics": None
-        }
+        return {"available": False, "fundamental_score": None, "numerical_evidence": [f"Error: {e!s}"], "metrics": None}

@@ -1,16 +1,18 @@
 import re
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=128)
+
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=1, max_length=50)
+    password: str = Field(..., min_length=1, max_length=128)
+
 
 class Token(BaseModel):
     access_token: str
@@ -21,6 +23,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: str | None = None
 
+
 class PreferenceUpdate(BaseModel):
     risk_level: str | None = "Medium"
     investment_type: str | None = "Long-term"
@@ -28,11 +31,11 @@ class PreferenceUpdate(BaseModel):
     budget_range: str | None = None
     expected_return: str | None = None
 
+
 class PreferenceOut(PreferenceUpdate):
     user_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserProfileOut(BaseModel):
@@ -43,8 +46,8 @@ class UserProfileOut(BaseModel):
 
 
 class ChangePasswordIn(BaseModel):
-    current_password: str
-    new_password: str = Field(..., min_length=8)
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class TechSummary(BaseModel):
@@ -59,11 +62,13 @@ class TechSummary(BaseModel):
     interpretations: dict | None = None
     available: bool | None = True
 
+
 class SentimentSummary(BaseModel):
     sentiment_score: float
     sentiment_label: str
     summary_text: str
-    
+
+
 class FunMetricSummary(BaseModel):
     pe_ratio: float | None
     eps: float | None
@@ -71,17 +76,20 @@ class FunMetricSummary(BaseModel):
     profit_margins: float | None
     debt_to_equity: float | None
 
+
 class FundSummary(BaseModel):
     fundamental_score: float | None = None
     numerical_evidence: list[str] = []
     metrics: FunMetricSummary | None = None
     available: bool | None = True
 
+
 class ScoreBreakdown(BaseModel):
     technical: float
     fundamental: float
     sentiment: float
     risk: float
+
 
 class AnalysisReportOut(BaseModel):
     ticker: str
@@ -91,6 +99,7 @@ class AnalysisReportOut(BaseModel):
     score_breakdown: ScoreBreakdown
     report: str
     full_data: Any
+
 
 class WatchlistAdd(BaseModel):
     ticker: str
@@ -103,17 +112,19 @@ class WatchlistAdd(BaseModel):
             raise ValueError(f"Invalid ticker '{v}'. Must match regex ^[A-Z.\\-]{{1,10}}$")
         return cleaned
 
+
 class WatchlistOut(WatchlistAdd):
     id: int
     user_id: int
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class RecommendationScoreBreakdown(BaseModel):
     technical: float
     fundamental: float
     sentiment: float
+
 
 class RecommendationOut(BaseModel):
     recommendation: str

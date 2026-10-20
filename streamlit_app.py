@@ -15,15 +15,11 @@ from services.technical import (
 )
 
 # Page configuration
-st.set_page_config(
-    page_title="StockSense AI",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="StockSense AI", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 
 # Custom CSS for premium dark aesthetics
-st.markdown("""
+st.markdown(
+    """
 <style>
     .reportview-container {
         background: #0B0E14;
@@ -42,17 +38,23 @@ st.markdown("""
         color: #60A5FA !important;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 # Initialize pipeline caching to speed up loads
 @st.cache_resource
 def get_pipeline():
     return StockAnalysisPipeline()
 
+
 pipeline = get_pipeline()
+
 
 def get_db():
     return SessionLocal()
+
 
 st.title("STOCKSENSE AI 📈")
 st.markdown("### Institutional-Grade Quantitative Research Terminal")
@@ -77,30 +79,30 @@ if analyze_btn and ticker:
             if df is None or df.empty:
                 st.error("Data not found for this ticker. Please check the symbol and try again.")
             else:
-                current_price = df.iloc[-1]['Close']
-                price_change = current_price - df.iloc[-2]['Close']
-                pct_change = (price_change / df.iloc[-2]['Close']) * 100
-                
+                current_price = df.iloc[-1]["Close"]
+                price_change = current_price - df.iloc[-2]["Close"]
+                pct_change = (price_change / df.iloc[-2]["Close"]) * 100
+
                 # Header Metrics
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Current Price", f"${current_price:.2f}", f"{price_change:.2f} ({pct_change:.2f}%)")
-                
+
                 # 2. Technicals
                 tech_df = calculate_technical_indicators(df)
                 tech_summary = generate_technical_summary(tech_df)
-                col2.metric("RSI (14)", f"{tech_summary['rsi']:.2f}", tech_summary['rsi_interpretation'])
-                col3.metric("Trend", tech_summary['trend_direction'])
-                
+                col2.metric("RSI (14)", f"{tech_summary['rsi']:.2f}", tech_summary["rsi_interpretation"])
+                col3.metric("Trend", tech_summary["trend_direction"])
+
                 # 3. Chart
                 st.subheader("Price Action (1Y)")
-                fig = go.Figure(data=[go.Candlestick(x=df['Date'],
-                                open=df['Open'],
-                                high=df['High'],
-                                low=df['Low'],
-                                close=df['Close'])])
+                fig = go.Figure(
+                    data=[
+                        go.Candlestick(x=df["Date"], open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"])
+                    ]
+                )
                 fig.update_layout(template="plotly_dark", height=500, margin=dict(l=0, r=0, t=0, b=0))
                 st.plotly_chart(fig, use_container_width=True)
-                
+
                 # 4. Deep Analysis via AI Pipeline
                 st.subheader("AI Tactical Report")
                 user_prefs = {
@@ -108,22 +110,24 @@ if analyze_btn and ticker:
                     "investment_type": investment_type,
                     "focus_type": "Technical & Fundamental",
                     "budget_range": "Not specified",
-                    "expected_return": "Not specified"
+                    "expected_return": "Not specified",
                 }
-                
+
                 report = pipeline.run(ticker=ticker, user_prefs=user_prefs, db=db, user_question="")
-                
+
                 if "error" in report:
                     st.error(report["error"])
                 else:
                     st.markdown(report.get("final_report", ""))
-                    
+
                     st.subheader("AI Decision Matrix")
-                    st.json({
-                        "Action": report.get("recommendation", "N/A"),
-                        "Confidence": f"{report.get('confidence_score', 0)}%",
-                        "Risk Grade": report.get("risk_grade", "N/A")
-                    })
-                    
+                    st.json(
+                        {
+                            "Action": report.get("recommendation", "N/A"),
+                            "Confidence": f"{report.get('confidence_score', 0)}%",
+                            "Risk Grade": report.get("risk_grade", "N/A"),
+                        }
+                    )
+
         except Exception as e:
             st.error(f"An error occurred during analysis: {e!s}")

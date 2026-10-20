@@ -29,3 +29,9 @@ build/
 .agent/
 .agents/
 
+# Coverage & testing
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+

@@ -12,29 +12,29 @@ from limiter import limiter
 
 router = APIRouter()
 
+
 @router.post("/signup", response_model=schemas.Token)
 @limiter.limit("5/minute")
 def signup(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    
+
     hashed_password = security.get_password_hash(user.password)
     new_user = models.User(username=user.username, hashed_password=hashed_password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    
+
     # Create default preferences
     default_prefs = models.UserPreference(user_id=new_user.id)
     db.add(default_prefs)
     db.commit()
 
     access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = security.create_access_token(
-        data={"sub": new_user.username}, expires_delta=access_token_expires
-    )
+    access_token = security.create_access_token(data={"sub": new_user.username}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer", "username": new_user.username}
+
 
 @router.post("/login", response_model=schemas.Token)
 @limiter.limit("5/minute")
@@ -47,8 +47,5 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=security.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = security.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
+    access_token = security.create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer", "username": user.username}
-
