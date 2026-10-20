@@ -300,3 +300,63 @@ def test_secret_key_validation():
     # Valid secret key initializes properly
     valid_settings = Settings(SECRET_KEY="a_secure_random_key_of_sufficient_length_32chars")
     assert valid_settings.SECRET_KEY == "a_secure_random_key_of_sufficient_length_32chars"
+
+
+def test_preferences_crud_and_validation(client):
+    # Register user
+    signup_resp = client.post("/api/auth/signup", json={"username": "pref_user", "password": "password12345"})
+    assert signup_resp.status_code == 200
+    token = signup_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Update preferences with full valid payload
+    valid_payload = {
+        "risk_level": "High",
+        "investment_type": "Short-term",
+        "focus_type": "Sentiment",
+        "budget_range": "$25,000",
+        "expected_return": "18%",
+    }
+    put_resp = client.put("/api/preferences", json=valid_payload, headers=headers)
+    assert put_resp.status_code == 200, put_resp.text
+    put_data = put_resp.json()
+    assert put_data["risk_level"] == "High"
+    assert put_data["investment_type"] == "Short-term"
+    assert put_data["focus_type"] == "Sentiment"
+    assert put_data["budget_range"] == "$25,000"
+    assert put_data["expected_return"] == "18%"
+
+    # 2. Verify persistence via GET /api/preferences
+    get_resp = client.get("/api/preferences", headers=headers)
+    assert get_resp.status_code == 200
+    get_data = get_resp.json()
+    assert get_data["risk_level"] == "High"
+    assert get_data["investment_type"] == "Short-term"
+    assert get_data["focus_type"] == "Sentiment"
+    assert get_data["budget_range"] == "$25,000"
+    assert get_data["expected_return"] == "18%"
+
+    # 3. Reject wrong field names with 422 (extra="forbid")
+    bad_field_resp1 = client.put("/api/preferences", json={"risk_tolerance": "High"}, headers=headers)
+    assert bad_field_resp1.status_code == 422
+
+    bad_field_resp2 = client.put("/api/preferences", json={"focus_area": "Technical"}, headers=headers)
+    assert bad_field_resp2.status_code == 422
+
+    bad_field_resp3 = client.put("/api/preferences", json={"investment_horizon": "Long-term"}, headers=headers)
+    assert bad_field_resp3.status_code == 422
+
+    # 4. Reject invalid literal values with 422
+    assert client.put("/api/preferences", json={"risk_level": "UltraRisky"}, headers=headers).status_code == 422
+    assert client.put("/api/preferences", json={"investment_type": "10-years"}, headers=headers).status_code == 422
+    assert client.put("/api/preferences", json={"focus_type": "MomentumOnly"}, headers=headers).status_code == 422
+
+    # 5. Partial update updates only supplied fields (model_dump(exclude_unset=True))
+    partial_resp = client.put("/api/preferences", json={"expected_return": "35%"}, headers=headers)
+    assert partial_resp.status_code == 200
+    after_partial = client.get("/api/preferences", headers=headers).json()
+    assert after_partial["expected_return"] == "35%"
+    assert after_partial["risk_level"] == "High"
+    assert after_partial["investment_type"] == "Short-term"
+    assert after_partial["focus_type"] == "Sentiment"
+    assert after_partial["budget_range"] == "$25,000"

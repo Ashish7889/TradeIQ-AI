@@ -58,3 +58,23 @@ def test_evaluate_fundamentals_exception(mock_ticker):
     result = evaluate_fundamentals("ERR")
     assert result["available"] is False
     assert result["fundamental_score"] is None
+
+
+@patch("yfinance.Ticker")
+def test_evaluate_fundamentals_caching(mock_ticker):
+    from services.fundamental import clear_fundamentals_cache
+
+    clear_fundamentals_cache()
+    mock_instance = MagicMock()
+    mock_instance.info = {"trailingPE": 20.0, "trailingEps": 5.0}
+    mock_ticker.return_value = mock_instance
+
+    res1 = evaluate_fundamentals("CACHE_TEST")
+    assert res1["available"] is True
+    assert mock_ticker.call_count == 1
+
+    # Second call for same ticker should hit TTL cache and not invoke Ticker constructor again
+    res2 = evaluate_fundamentals("CACHE_TEST")
+    assert res2["available"] is True
+    assert mock_ticker.call_count == 1
+    assert res2["metrics"]["pe_ratio"] == 20.0

@@ -1060,9 +1060,9 @@ async function loadPreferences() {
         if (res.status === 401) { handleAuthError(); return; }
         if (!res.ok) return;
         const prefs = await res.json();
-        if (prefs.risk_tolerance) setPillValue("riskGroup", prefs.risk_tolerance);
-        if (prefs.investment_horizon) setPillValue("investGroup", prefs.investment_horizon);
-        if (prefs.focus_area) setPillValue("focusGroup", prefs.focus_area);
+        if (prefs.risk_level) setPillValue("riskGroup", prefs.risk_level);
+        if (prefs.investment_type) setPillValue("investGroup", prefs.investment_type);
+        if (prefs.focus_type) setPillValue("focusGroup", prefs.focus_type);
         if (prefs.budget_range) document.getElementById("budgetInput").value = prefs.budget_range;
         if (prefs.expected_return) document.getElementById("returnInput").value = prefs.expected_return;
     } catch (e) {
@@ -1087,9 +1087,9 @@ function getPillValue(groupId) {
 
 async function savePreferences() {
     const payload = {
-        risk_tolerance: getPillValue("riskGroup"),
-        investment_horizon: getPillValue("investGroup"),
-        focus_area: getPillValue("focusGroup"),
+        risk_level: getPillValue("riskGroup") || null,
+        investment_type: getPillValue("investGroup") || null,
+        focus_type: getPillValue("focusGroup") || null,
         budget_range: document.getElementById("budgetInput").value || null,
         expected_return: document.getElementById("returnInput").value || null
     };
@@ -1101,9 +1101,20 @@ async function savePreferences() {
         });
         if (res.status === 401) { handleAuthError(); return; }
         if (res.ok) {
+            // Also synchronize with Account Dashboard pills if present
+            if (payload.risk_level) setPillValue("accountRiskGroup", payload.risk_level);
+            if (payload.investment_type) setPillValue("accountInvestGroup", payload.investment_type);
+            if (payload.focus_type) setPillValue("accountFocusGroup", payload.focus_type);
+            const acctBudget = document.getElementById("accountBudgetInput");
+            if (acctBudget && payload.budget_range) acctBudget.value = payload.budget_range;
+            const acctReturn = document.getElementById("accountReturnInput");
+            if (acctReturn && payload.expected_return) acctReturn.value = payload.expected_return;
+
             const msg = document.getElementById("prefSavedMsg");
-            msg.style.display = "block";
-            setTimeout(() => { msg.style.display = "none"; }, 3000);
+            if (msg) {
+                msg.style.display = "block";
+                setTimeout(() => { msg.style.display = "none"; }, 3000);
+            }
         }
     } catch (e) {
         console.error("Failed to save preferences", e);
@@ -1312,15 +1323,22 @@ function renderExecutiveReport(data) {
     }
     const tickersText = tickersList.join(", ");
     const modelText = data.model ? escapeHtml(data.model) : "";
+    const profileText = data.applied_profile || "";
 
     const headerMetaHtml = `
         <div class="memo-header-meta">
             <div class="memo-meta-main">
                 <span class="memo-meta-time">Generated ${escapeHtml(genTime)}, data as of today</span>
                 ${tickersText ? `<span class="memo-meta-dot">•</span><span class="memo-meta-tickers">Covered: <strong>${escapeHtml(tickersText)}</strong></span>` : ''}
+                ${profileText ? `<span class="memo-meta-dot">•</span><span class="memo-meta-profile">Profile: <strong>${escapeHtml(profileText)}</strong></span>` : ''}
             </div>
             ${modelText ? `<div class="memo-meta-model"><span class="memo-model-badge">${modelText}</span></div>` : ''}
         </div>
+        ${data.fundamental_notice ? `
+        <div class="memo-notice-banner" style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 6px; padding: 8px 12px; margin-top: 10px; color: #eab308; font-size: 11.5px; display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span>
+            <span><strong>Notice:</strong> ${escapeHtml(data.fundamental_notice)}</span>
+        </div>` : ''}
     `;
 
     // 2. Optional Dashboard Snapshot (if full_data)

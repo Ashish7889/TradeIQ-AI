@@ -1,5 +1,5 @@
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -25,15 +25,22 @@ class TokenData(BaseModel):
 
 
 class PreferenceUpdate(BaseModel):
-    risk_level: str | None = "Medium"
-    investment_type: str | None = "Long-term"
-    focus_type: str | None = "Technical"
+    model_config = ConfigDict(extra="forbid")
+
+    risk_level: Literal["Low", "Medium", "High"] | None = None
+    investment_type: Literal["Short-term", "Long-term"] | None = None
+    focus_type: Literal["Technical", "Fundamental", "Sentiment"] | None = None
     budget_range: str | None = None
     expected_return: str | None = None
 
 
-class PreferenceOut(PreferenceUpdate):
+class PreferenceOut(BaseModel):
     user_id: int
+    risk_level: str | None = None
+    investment_type: str | None = None
+    focus_type: str | None = None
+    budget_range: str | None = None
+    expected_return: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

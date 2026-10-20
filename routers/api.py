@@ -182,11 +182,9 @@ def update_preferences(
         prefs = UserPreference(user_id=current_user.id)
         db.add(prefs)
 
-    prefs.risk_level = prefs_in.risk_level
-    prefs.investment_type = prefs_in.investment_type
-    prefs.focus_type = prefs_in.focus_type
-    prefs.budget_range = prefs_in.budget_range
-    prefs.expected_return = prefs_in.expected_return
+    update_data = prefs_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(prefs, field, value)
 
     db.commit()
     db.refresh(prefs)

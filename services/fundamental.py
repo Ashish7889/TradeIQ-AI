@@ -1,24 +1,58 @@
 import logging
+import time
+from typing import Any
 
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
+# In-memory TTL cache for fundamentals: {ticker: (cached_at_epoch, data)}
+_FUNDAMENTALS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+CACHE_TTL_SECONDS = 1800.0  # 30 minutes
 
-def evaluate_fundamentals(ticker: str):
+
+def clear_fundamentals_cache() -> None:
+    """Clears the fundamentals in-memory cache (useful for testing)."""
+    _FUNDAMENTALS_CACHE.clear()
+
+
+def evaluate_fundamentals(ticker: str) -> dict[str, Any]:
     ticker = ticker.upper()
+    now = time.time()
+
+    # 1. Check TTL Cache
+    if ticker in _FUNDAMENTALS_CACHE:
+        cached_time, cached_data = _FUNDAMENTALS_CACHE[ticker]
+        if now - cached_time < CACHE_TTL_SECONDS:
+            logger.debug(f"[Fundamentals] Cache hit for {ticker}")
+            return cached_data
+
+    # 2. Fetch with Retry / Exponential Backoff
+    info = None
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            if info:
+                break
+        except Exception as err:
+            logger.warning(f"[Fundamentals] Attempt {attempt + 1}/{max_retries} failed for {ticker}: {err}")
+            if attempt < max_retries - 1:
+                time.sleep(0.3 * (2**attempt))
+
+    if not info:
+        result = {
+            "available": False,
+            "fundamental_score": None,
+            "numerical_evidence": ["Fundamental data unavailable (provider rate-limited or missing)."],
+            "metrics": None,
+        }
+        # Cache negative result for shorter duration (5 mins) to prevent spamming
+        _FUNDAMENTALS_CACHE[ticker] = (now - CACHE_TTL_SECONDS + 300.0, result)
+        return result
+
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-
-        if not info:
-            return {
-                "available": False,
-                "fundamental_score": None,
-                "numerical_evidence": ["Fundamental data unavailable."],
-                "metrics": None,
-            }
-
         # Extract metrics
         pe_ratio = info.get("trailingPE") or info.get("forwardPE", 0)
         eps = info.get("trailingEps", 0)
@@ -57,7 +91,7 @@ def evaluate_fundamentals(ticker: str):
                 score -= 10
                 evidence.append("Revenue is shrinking year-over-year.")
 
-        # ── profit Margins ──────────────────────────
+        # ── Profit Margins ──────────────────────────
         if profit_margins:
             margin_pct = profit_margins * 100
             evidence.append(f"Profit Margin is {margin_pct:.1f}%.")
@@ -78,7 +112,7 @@ def evaluate_fundamentals(ticker: str):
         # Bounds check
         score = max(0, min(100, score))
 
-        return {
+        result = {
             "available": True,
             "fundamental_score": score,
             "numerical_evidence": evidence,
@@ -90,7 +124,16 @@ def evaluate_fundamentals(ticker: str):
                 "debt_to_equity": round(debt_to_equity, 2) if debt_to_equity else None,
             },
         }
+        _FUNDAMENTALS_CACHE[ticker] = (now, result)
+        return result
 
     except Exception as e:
-        logger.error(f"Error fetching fundamentals for {ticker}: {e}")
-        return {"available": False, "fundamental_score": None, "numerical_evidence": [f"Error: {e!s}"], "metrics": None}
+        logger.error(f"Error parsing fundamentals for {ticker}: {e}")
+        result = {
+            "available": False,
+            "fundamental_score": None,
+            "numerical_evidence": [f"Error: {e!s}"],
+            "metrics": None,
+        }
+        _FUNDAMENTALS_CACHE[ticker] = (now - CACHE_TTL_SECONDS + 300.0, result)
+        return result
