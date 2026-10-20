@@ -18,10 +18,10 @@ score_sentiment_with_vader() directly to build Documents and get baseline scores
 """
 
 import logging
+import xml.etree.ElementTree as ET
 from datetime import datetime
 
 import requests
-import xml.etree.ElementTree as ET
 import yfinance as yf
 from bs4 import BeautifulSoup
 from langchain_core.output_parsers import JsonOutputParser
