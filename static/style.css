@@ -1880,109 +1880,382 @@ label {
 }
 
 /* ==========================================================================
-   Auth Modal
+   TradeIQ Auth Card (Account Login UX Flow)
    ========================================================================== */
-.modal-overlay {
+.modal-overlay,
+.auth-page-wrapper {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(4px);
+    background: var(--bg-app);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 100;
-    padding: 20px;
+    padding: 24px;
+    overflow-y: auto;
 }
 
-.modal-card {
+.auth-card {
     background: var(--bg-surface);
     border: 1px solid var(--border-default);
-    border-radius: var(--card-radius);
-    padding: 32px 28px;
-    max-width: 400px;
+    border-radius: 8px;
+    padding: 44px;
+    max-width: 440px;
     width: 100%;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05), 0 20px 36px rgba(0, 0, 0, 0.05);
+    position: relative;
+    box-sizing: border-box;
 }
 
-.modal-logo {
-    font-size: 20px;
-    font-weight: 700;
-    text-align: center;
-    margin-bottom: 6px;
-}
-
-.modal-logo span {
-    color: var(--accent);
-}
-
-.modal-sub {
-    font-size: 12px;
-    color: var(--text-secondary);
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.tab-strip {
+/* Header & Brand */
+.auth-header {
+    margin-bottom: 24px;
     display: flex;
-    background: var(--bg-app);
-    border-radius: 8px;
-    padding: 3px;
-    margin-bottom: 20px;
+    align-items: center;
 }
 
-.tab-btn {
-    flex: 1;
-    padding: 8px 0;
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 6px;
-    color: var(--text-secondary);
+.auth-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
 }
 
-.tab-btn.active {
-    background: var(--bg-surface);
+.auth-brand-icon {
+    flex-shrink: 0;
+}
+
+.auth-brand-name {
+    font-size: 19px;
+    font-weight: 700;
     color: var(--text-primary);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    letter-spacing: -0.02em;
 }
 
-.auth-input {
-    width: 100%;
-    height: 40px;
-    padding: 0 12px;
-    background: var(--bg-app);
-    border: 1px solid var(--border-default);
-    border-radius: 8px;
+.auth-brand-badge {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    margin-left: 2px;
+}
+
+/* Identity Tile: Back button + Username (Step 2) */
+.auth-identity-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 12px;
+}
+
+.auth-back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 150ms ease;
+    padding: 0;
+}
+
+.auth-back-btn:hover {
+    background: var(--bg-surface-elevated);
+}
+
+.auth-back-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.auth-identity-user {
     font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.auth-input:focus {
-    outline: none;
-    border-color: var(--accent);
-    background: var(--bg-surface);
+/* Titles */
+.auth-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.015em;
+    margin-bottom: 24px;
+    line-height: 1.25;
 }
 
-.auth-btn {
+/* Fields & Underline Inputs */
+.auth-field {
+    margin-bottom: 16px;
+    position: relative;
+}
+
+.auth-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    display: block;
+}
+
+.auth-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.auth-input-underline {
     width: 100%;
-    height: 40px;
+    height: 38px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border-default);
+    border-radius: 0;
+    padding: 6px 0;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--text-primary);
+    transition: border-bottom-color 150ms ease;
+    box-sizing: border-box;
+}
+
+.auth-input-underline::placeholder {
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+.auth-input-underline:focus {
+    outline: none;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 5px;
+}
+
+.auth-input-group .auth-input-underline {
+    padding-right: 36px;
+}
+
+/* Eye Show/Hide Toggle */
+.auth-eye-btn {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0;
+    transition: color 150ms ease;
+}
+
+.auth-eye-btn:hover {
+    color: var(--text-primary);
+}
+
+.auth-eye-btn:focus-visible {
+    outline: 2px solid var(--accent);
+}
+
+/* Help Links & Meta */
+.auth-links-row {
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    margin-bottom: 8px;
+}
+
+.auth-link-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    padding: 0;
+    font-family: inherit;
+}
+
+.auth-link-btn:hover {
+    text-decoration: underline;
+    color: var(--accent-hover);
+}
+
+.auth-link-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Checkbox (Keep me signed in) */
+.auth-meta-row {
+    margin-top: 14px;
+    margin-bottom: 4px;
+}
+
+.auth-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.auth-checkbox-label input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* Password rules hint */
+.auth-password-hints {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.auth-hint-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 150ms ease;
+}
+
+.auth-hint-item.valid {
+    color: var(--success);
+    font-weight: 500;
+}
+
+.auth-hint-item.invalid {
+    color: var(--danger);
+}
+
+/* Error Container with Reserved Space (Zero Layout Shift) */
+.auth-error-box {
+    color: var(--danger);
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 20px;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    box-sizing: border-box;
+}
+
+/* Action Button Row (Desktop: right-aligned; Mobile: full width) */
+.auth-actions-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 28px;
+    width: 100%;
+}
+
+.auth-btn-primary {
+    min-width: 108px;
+    height: 36px;
+    padding: 0 20px;
     background: var(--accent);
     color: #ffffff;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
-    border-radius: 8px;
-    margin-top: 8px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: background 150ms ease;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.auth-btn:hover {
+.auth-btn-primary:hover {
     background: var(--accent-hover);
 }
 
-.auth-error {
-    color: var(--danger);
-    font-size: 11px;
-    text-align: center;
-    margin-top: 10px;
-    min-height: 16px;
+.auth-btn-primary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* In-card Smooth Step Transitions */
+.auth-stage {
+    position: relative;
+    width: 100%;
+}
+
+.auth-step {
+    width: 100%;
+    animation: authStepIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes authStepIn {
+    from {
+        opacity: 0;
+        transform: translateX(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-step {
+        animation: none !important;
+        transform: none !important;
+    }
+}
+
+/* Mobile Layout (<480px) */
+@media (max-width: 480px) {
+    .modal-overlay,
+    .auth-page-wrapper {
+        padding: 0;
+        align-items: stretch;
+    }
+
+    .auth-card {
+        max-width: 100%;
+        width: 100%;
+        min-height: 100vh;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 40px 24px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .auth-actions-row {
+        justify-content: stretch;
+    }
+
+    .auth-btn-primary {
+        width: 100%;
+        min-height: 44px; /* 44px touch target */
+    }
 }
 
 /* Spinner */

@@ -47,8 +47,8 @@ let currentUser = null;
 let currentTheme = "light";
 
 try {
-    authToken = localStorage.getItem("ss_token") || null;
-    currentUser = localStorage.getItem("ss_user") || null;
+    authToken = localStorage.getItem("ss_token") || sessionStorage.getItem("ss_token") || null;
+    currentUser = localStorage.getItem("ss_user") || sessionStorage.getItem("ss_user") || null;
     currentTheme = localStorage.getItem("tradeiq_theme") || "light";
 } catch (e) {
     currentTheme = "light";
@@ -183,9 +183,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Auth Form submit handlers
     const loginFormEl = document.getElementById("loginForm");
-    if (loginFormEl) loginFormEl.addEventListener("submit", handleLoginFormSubmit);
+    if (loginFormEl) loginFormEl.addEventListener("submit", handleSignInStep1Submit);
+    const loginPasswordFormEl = document.getElementById("loginPasswordForm");
+    if (loginPasswordFormEl) loginPasswordFormEl.addEventListener("submit", handleSignInStep2Submit);
     const signupFormEl = document.getElementById("signupForm");
-    if (signupFormEl) signupFormEl.addEventListener("submit", handleSignupFormSubmit);
+    if (signupFormEl) signupFormEl.addEventListener("submit", handleSignUpStep1Submit);
+    const signupPasswordFormEl = document.getElementById("signupPasswordForm");
+    if (signupPasswordFormEl) signupPasswordFormEl.addEventListener("submit", handleSignUpStep2Submit);
+
+    // Escape key navigates back to step 1
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            const step2Login = document.getElementById("signInStep2");
+            const step2Signup = document.getElementById("signUpStep2");
+            if (step2Login && step2Login.style.display !== "none") {
+                backToSignInStep1();
+            } else if (step2Signup && step2Signup.style.display !== "none") {
+                backToSignUpStep1();
+            }
+        }
+    });
 
     // Search
     const searchBtn = document.getElementById("searchBtn");
@@ -279,8 +296,13 @@ function setupPillGroup(groupId) {
 
 // ========== AUTH ==========
 function showAuthModal() {
-    document.getElementById("authModal").style.display = "flex";
-    document.getElementById("appContainer").style.display = "none";
+    const modal = document.getElementById("authModal");
+    const app = document.getElementById("appContainer");
+    if (modal) modal.style.display = "flex";
+    if (app) app.style.display = "none";
+    if (typeof switchAuthFlow === "function") {
+        switchAuthFlow("signin");
+    }
 }
 
 function updateUserDisplays(username) {
@@ -328,32 +350,114 @@ function showApp() {
     loadAccountDashboard();
 }
 
-function switchTab(tab) {
-    document.getElementById("loginForm").style.display = tab === "login" ? "block" : "none";
-    document.getElementById("signupForm").style.display = tab === "signup" ? "block" : "none";
-    document.getElementById("showLoginTab").classList.toggle("active", tab === "login");
-    document.getElementById("showSignupTab").classList.toggle("active", tab === "signup");
-    document.getElementById("authError").innerText = "";
+function switchAuthFlow(flow) {
+    const isSignIn = flow === "signin";
+    const signInStep1 = document.getElementById("signInStep1");
+    const signInStep2 = document.getElementById("signInStep2");
+    const signUpStep1 = document.getElementById("signUpStep1");
+    const signUpStep2 = document.getElementById("signUpStep2");
+
+    if (signInStep1) signInStep1.style.display = isSignIn ? "block" : "none";
+    if (signInStep2) signInStep2.style.display = "none";
+    if (signUpStep1) signUpStep1.style.display = !isSignIn ? "block" : "none";
+    if (signUpStep2) signUpStep2.style.display = "none";
+
+    clearAuthErrors();
+
+    if (isSignIn) {
+        const u = document.getElementById("loginUsername");
+        if (u) {
+            u.focus();
+            u.select();
+        }
+    } else {
+        const u = document.getElementById("signupUsername");
+        if (u) {
+            u.focus();
+            u.select();
+        }
+    }
 }
 
-function handleLoginFormSubmit(e) {
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
-    handleLogin(e);
+function backToSignInStep1() {
+    const s1 = document.getElementById("signInStep1");
+    const s2 = document.getElementById("signInStep2");
+    if (s1) s1.style.display = "block";
+    if (s2) s2.style.display = "none";
+    clearAuthErrors();
+    const u = document.getElementById("loginUsername");
+    if (u) {
+        u.focus();
+        u.select();
+    }
 }
 
-function handleSignupFormSubmit(e) {
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
-    handleSignup(e);
+function backToSignUpStep1() {
+    const s1 = document.getElementById("signUpStep1");
+    const s2 = document.getElementById("signUpStep2");
+    if (s1) s1.style.display = "block";
+    if (s2) s2.style.display = "none";
+    clearAuthErrors();
+    const u = document.getElementById("signupUsername");
+    if (u) {
+        u.focus();
+        u.select();
+    }
 }
 
-async function handleLogin(e) {
+function clearAuthErrors() {
+    ["signInError1", "signInError2", "signUpError1", "signUpError2"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = "";
+    });
+}
+
+function handleSignInStep1Submit(e) {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
-    const username = document.getElementById("loginUsername").value.trim();
-    const password = document.getElementById("loginPassword").value;
-    if (!username || !password) {
-        showAuthError("Please provide both username and password.");
+    clearAuthErrors();
+    const usernameInput = document.getElementById("loginUsername");
+    const username = usernameInput ? usernameInput.value.trim() : "";
+    if (!username) {
+        const errEl = document.getElementById("signInError1");
+        if (errEl) errEl.innerText = "Enter a valid username or email address.";
+        if (usernameInput) usernameInput.focus();
         return;
     }
+    const displayEl = document.getElementById("signInDisplayUser");
+    if (displayEl) displayEl.innerText = username;
+
+    const s1 = document.getElementById("signInStep1");
+    const s2 = document.getElementById("signInStep2");
+    if (s1) s1.style.display = "none";
+    if (s2) s2.style.display = "block";
+
+    const passInput = document.getElementById("loginPassword");
+    if (passInput) {
+        passInput.value = "";
+        passInput.focus();
+    }
+}
+
+async function handleSignInStep2Submit(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    clearAuthErrors();
+    const username = (document.getElementById("loginUsername")?.value || "").trim();
+    const password = document.getElementById("loginPassword")?.value || "";
+
+    if (!password) {
+        const errEl = document.getElementById("signInError2");
+        if (errEl) errEl.innerText = "Please enter your password.";
+        document.getElementById("loginPassword")?.focus();
+        return;
+    }
+
+    const btn = document.getElementById("btnSignInSubmit");
+    const origText = btn ? btn.innerText : "Sign in";
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = "Signing in...";
+    }
+
     try {
         const formData = new URLSearchParams();
         formData.append("username", username);
@@ -366,27 +470,90 @@ async function handleLogin(e) {
         });
         const data = await res.json();
         if (!res.ok) {
-            showAuthError(data.detail || "Authentication failed.");
+            const errEl = document.getElementById("signInError2");
+            if (errEl) {
+                errEl.innerText = "That username or password isn't right. Check and try again.";
+            }
+            const passInput = document.getElementById("loginPassword");
+            if (passInput) {
+                passInput.focus();
+                passInput.select();
+            }
             return;
         }
         setAuth(data.access_token, data.username || username);
-    } catch (e) {
-        showAuthError("Network error. Please try again.");
+    } catch (err) {
+        const errEl = document.getElementById("signInError2");
+        if (errEl) errEl.innerText = "Network error. Please try again.";
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = origText;
+        }
     }
 }
 
-async function handleSignup(e) {
+function handleSignUpStep1Submit(e) {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
-    const username = document.getElementById("signupUsername").value.trim();
-    const password = document.getElementById("signupPassword").value;
-    if (!username || !password) {
-        showAuthError("Please provide username and password.");
+    clearAuthErrors();
+    const usernameInput = document.getElementById("signupUsername");
+    const username = usernameInput ? usernameInput.value.trim() : "";
+
+    if (!username || username.length < 3) {
+        const errEl = document.getElementById("signUpError1");
+        if (errEl) errEl.innerText = "Username must be at least 3 characters long.";
+        if (usernameInput) usernameInput.focus();
+        return;
+    }
+    if (username.length > 30) {
+        const errEl = document.getElementById("signUpError1");
+        if (errEl) errEl.innerText = "Username cannot exceed 30 characters.";
+        if (usernameInput) usernameInput.focus();
+        return;
+    }
+
+    const displayEl = document.getElementById("signUpDisplayUser");
+    if (displayEl) displayEl.innerText = username;
+
+    const s1 = document.getElementById("signUpStep1");
+    const s2 = document.getElementById("signUpStep2");
+    if (s1) s1.style.display = "none";
+    if (s2) s2.style.display = "block";
+
+    validateLivePassword();
+    const passInput = document.getElementById("signupPassword");
+    if (passInput) {
+        passInput.value = "";
+        passInput.focus();
+    }
+}
+
+async function handleSignUpStep2Submit(e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    clearAuthErrors();
+    const username = (document.getElementById("signupUsername")?.value || "").trim();
+    const password = document.getElementById("signupPassword")?.value || "";
+
+    if (!password) {
+        const errEl = document.getElementById("signUpError2");
+        if (errEl) errEl.innerText = "Please enter a password.";
+        document.getElementById("signupPassword")?.focus();
         return;
     }
     if (password.length < 8) {
-        showAuthError("Password must be at least 8 characters long.");
+        const errEl = document.getElementById("signUpError2");
+        if (errEl) errEl.innerText = "Password must be at least 8 characters long.";
+        document.getElementById("signupPassword")?.focus();
         return;
     }
+
+    const btn = document.getElementById("btnSignUpSubmit");
+    const origText = btn ? btn.innerText : "Create account";
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = "Creating account...";
+    }
+
     try {
         const res = await fetch("/api/auth/signup", {
             method: "POST",
@@ -395,9 +562,11 @@ async function handleSignup(e) {
         });
         const data = await res.json();
         if (!res.ok) {
-            showAuthError(data.detail || "Registration failed.");
+            const errEl = document.getElementById("signUpError2");
+            if (errEl) errEl.innerText = data.detail || "Registration failed. Try a different username.";
             return;
         }
+
         const formData = new URLSearchParams();
         formData.append("username", username);
         formData.append("password", password);
@@ -410,29 +579,93 @@ async function handleSignup(e) {
         if (loginRes.ok) {
             setAuth(loginData.access_token, loginData.username || username);
         } else {
-            switchTab("login");
-            showAuthError("Registration complete. Please sign in.");
+            switchAuthFlow("signin");
+            const errEl = document.getElementById("signInError1");
+            if (errEl) errEl.innerText = "Registration complete. Please sign in.";
         }
-    } catch (e) {
-        showAuthError("Network error. Please try again.");
+    } catch (err) {
+        const errEl = document.getElementById("signUpError2");
+        if (errEl) errEl.innerText = "Network error. Please try again.";
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = origText;
+        }
+    }
+}
+
+function validateLivePassword() {
+    const pass = document.getElementById("signupPassword")?.value || "";
+    const ruleLength = document.getElementById("ruleLength");
+    if (!ruleLength) return;
+
+    if (pass.length >= 8) {
+        ruleLength.classList.add("valid");
+        ruleLength.innerHTML = `<svg class="hint-bullet" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg> Minimum 8 characters`;
+    } else {
+        ruleLength.classList.remove("valid");
+        ruleLength.innerHTML = `<svg class="hint-bullet" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="6"/></svg> Minimum 8 characters`;
+    }
+}
+
+function togglePasswordVisibility(inputId, iconId) {
+    const input = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    if (!input) return;
+
+    const isPassword = input.type === "password";
+    input.type = isPassword ? "text" : "password";
+
+    const btn = input.parentElement ? input.parentElement.querySelector(".auth-eye-btn") : null;
+    if (btn) {
+        btn.setAttribute("aria-label", isPassword ? "Hide password" : "Show password");
+    }
+
+    if (icon) {
+        if (isPassword) {
+            icon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>`;
+        } else {
+            icon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>`;
+        }
+    }
+}
+
+function handleForgotPassword() {
+    const errBox = document.getElementById("signInError2");
+    if (errBox) {
+        errBox.innerText = "Password reset is coming soon. Please contact your system administrator or support@tradeiq.ai.";
     }
 }
 
 function showAuthError(msg) {
-    document.getElementById("authError").innerText = msg;
+    const errEl = document.getElementById("signInError2") || document.getElementById("signInError1");
+    if (errEl) errEl.innerText = msg;
 }
 
 function setAuth(token, username) {
     authToken = token;
     currentUser = username;
+    const keepSignedInEl = document.getElementById("keepSignedIn");
+    const remember = keepSignedInEl ? keepSignedInEl.checked : true;
+
     try {
-        localStorage.setItem("ss_token", token);
-        localStorage.setItem("ss_user", username);
-    } catch (e) {}
+        if (remember) {
+            localStorage.setItem("ss_token", token);
+            localStorage.setItem("ss_user", username);
+            sessionStorage.removeItem("ss_token");
+            sessionStorage.removeItem("ss_user");
+        } else {
+            sessionStorage.setItem("ss_token", token);
+            sessionStorage.setItem("ss_user", username);
+            localStorage.removeItem("ss_token");
+            localStorage.removeItem("ss_user");
+        }
+    } catch (e) {
+        console.warn("Storage write failed:", e);
+    }
     updateUserDisplays(username);
     showApp();
 }
-
 
 function handleLogout() {
     authToken = null;
@@ -440,14 +673,47 @@ function handleLogout() {
     try {
         localStorage.removeItem("ss_token");
         localStorage.removeItem("ss_user");
+        sessionStorage.removeItem("ss_token");
+        sessionStorage.removeItem("ss_user");
     } catch (e) {}
+
+    const pass1 = document.getElementById("loginPassword");
+    if (pass1) pass1.value = "";
+    const pass2 = document.getElementById("signupPassword");
+    if (pass2) pass2.value = "";
+
     showAuthModal();
 }
 
 function handleAuthError() {
     handleLogout();
-    showAuthError("Your session has expired. Please sign in again.");
+    const err = document.getElementById("signInError1");
+    if (err) err.innerText = "Your session has expired. Please sign in again.";
 }
+
+// Backward-compatibility wrappers & Global exports
+function switchTab(tab) {
+    switchAuthFlow(tab === "signup" ? "signup" : "signin");
+}
+function handleLoginFormSubmit(e) { handleSignInStep1Submit(e); }
+function handleSignupFormSubmit(e) { handleSignUpStep1Submit(e); }
+function handleLogin(e) { handleSignInStep2Submit(e); }
+function handleSignup(e) { handleSignUpStep2Submit(e); }
+
+window.switchAuthFlow = switchAuthFlow;
+window.backToSignInStep1 = backToSignInStep1;
+window.backToSignUpStep1 = backToSignUpStep1;
+window.handleSignInStep1Submit = handleSignInStep1Submit;
+window.handleSignInStep2Submit = handleSignInStep2Submit;
+window.handleSignUpStep1Submit = handleSignUpStep1Submit;
+window.handleSignUpStep2Submit = handleSignUpStep2Submit;
+window.validateLivePassword = validateLivePassword;
+window.togglePasswordVisibility = togglePasswordVisibility;
+window.handleForgotPassword = handleForgotPassword;
+window.switchTab = switchTab;
+window.showAuthError = showAuthError;
+window.setAuth = setAuth;
+window.handleLogout = handleLogout;
 
 function authHeaders() {
     return {

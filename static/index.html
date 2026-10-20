@@ -7,40 +7,180 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="/static/style.css?v=11">
+    <link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
 
 <!-- Backdrop for mobile / drawer interactions -->
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
-<!-- ========== AUTH MODAL ========== -->
-<div class="modal-overlay" id="authModal">
-    <div class="modal-card">
-        <div class="modal-logo">TradeIQ <span>QUANT</span></div>
-        <p class="modal-sub">Institutional stock intelligence & synthesis</p>
-        <div class="tab-strip">
-            <button type="button" class="tab-btn active" id="showLoginTab" onclick="switchTab('login')">Sign in</button>
-            <button type="button" class="tab-btn" id="showSignupTab" onclick="switchTab('signup')">Create account</button>
+<!-- ========== AUTH CONTAINER / MODAL (TradeIQ Account UX Flow) ========== -->
+<div class="auth-page-wrapper modal-overlay" id="authModal">
+    <div class="auth-card" id="authCard" role="region" aria-label="Account Authentication">
+        
+        <!-- Minimal TradeIQ Brand Header -->
+        <div class="auth-header">
+            <div class="auth-brand">
+                <svg class="auth-brand-icon" width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                    <rect width="32" height="32" rx="7" fill="var(--accent)"/>
+                    <circle cx="16" cy="15" r="8" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+                    <line x1="21" y1="20" x2="26" y2="25" stroke="#a5b4fc" stroke-width="2.5" stroke-linecap="round"/>
+                    <line x1="13" y1="16" x2="13" y2="19" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round"/>
+                    <line x1="16" y1="13" x2="16" y2="19" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/>
+                    <line x1="19" y1="11" x2="19" y2="19" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+                <span class="auth-brand-name">TradeIQ <span class="auth-brand-badge">QUANT</span></span>
+            </div>
         </div>
-        <!-- Login -->
-        <form id="loginForm" onsubmit="handleLoginFormSubmit(event)">
-            <label for="loginUsername">Username</label>
-            <input class="auth-input" type="text" id="loginUsername" placeholder="Enter username" autocomplete="username">
-            <label for="loginPassword">Password</label>
-            <input class="auth-input" type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password">
-            <button class="auth-btn" type="submit">Sign in</button>
-        </form>
-        <!-- Signup -->
-        <form id="signupForm" style="display:none;" onsubmit="handleSignupFormSubmit(event)">
-            <label for="signupUsername">Username</label>
-            <input class="auth-input" type="text" id="signupUsername" placeholder="Alphanumeric, 3-30 chars" autocomplete="username">
-            <label for="signupPassword">Password</label>
-            <input class="auth-input" type="password" id="signupPassword" placeholder="Minimum 8 characters" autocomplete="new-password">
-            <button class="auth-btn" type="submit">Create account</button>
-        </form>
-        <p class="auth-error" id="authError"></p>
-    </div>
+
+        <!-- In-card Stage Container -->
+        <div class="auth-stage" id="authStage">
+
+            <!-- ================= SIGN IN STEP 1: Username ================= -->
+            <div class="auth-step" id="signInStep1">
+                <form id="loginForm" onsubmit="handleSignInStep1Submit(event)">
+                    <h1 class="auth-title">Sign in</h1>
+                    
+                    <div class="auth-field">
+                        <label for="loginUsername" class="auth-label">Username</label>
+                        <input class="auth-input-underline" type="text" id="loginUsername" name="username" placeholder="Username" autocomplete="username" spellcheck="false" required>
+                    </div>
+
+                    <div class="auth-links-row">
+                        <span class="auth-subtext">No account?</span>
+                        <button type="button" class="auth-link-btn" onclick="switchAuthFlow('signup')">Create one!</button>
+                    </div>
+
+                    <div class="auth-error-box" id="signInError1" aria-live="polite"></div>
+
+                    <div class="auth-actions-row">
+                        <button type="submit" class="auth-btn-primary" id="btnSignInNext">Next</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ================= SIGN IN STEP 2: Password ================= -->
+            <div class="auth-step" id="signInStep2" style="display: none;">
+                <form id="loginPasswordForm" onsubmit="handleSignInStep2Submit(event)">
+                    <!-- Identity Tile (Back Arrow + Username) -->
+                    <div class="auth-identity-banner">
+                        <button type="button" class="auth-back-btn" onclick="backToSignInStep1()" aria-label="Change username" title="Back to username">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <span class="auth-identity-user" id="signInDisplayUser"></span>
+                    </div>
+
+                    <h1 class="auth-title">Enter password</h1>
+
+                    <div class="auth-field">
+                        <label for="loginPassword" class="auth-label">Password</label>
+                        <div class="auth-input-group">
+                            <input class="auth-input-underline" type="password" id="loginPassword" name="password" placeholder="Password" autocomplete="current-password" required>
+                            <button type="button" class="auth-eye-btn" id="toggleLoginPasswordBtn" onclick="togglePasswordVisibility('loginPassword', 'eyeIconLogin')" aria-label="Show password">
+                                <svg id="eyeIconLogin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="auth-meta-row">
+                        <label class="auth-checkbox-label">
+                            <input type="checkbox" id="keepSignedIn" checked>
+                            <span>Keep me signed in</span>
+                        </label>
+                    </div>
+
+                    <div class="auth-links-row">
+                        <button type="button" class="auth-link-btn" onclick="handleForgotPassword()">Forgot password?</button>
+                    </div>
+
+                    <div class="auth-error-box" id="signInError2" aria-live="polite"></div>
+
+                    <div class="auth-actions-row">
+                        <button type="submit" class="auth-btn-primary" id="btnSignInSubmit">Sign in</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ================= SIGN UP STEP 1: Username ================= -->
+            <div class="auth-step" id="signUpStep1" style="display: none;">
+                <form id="signupForm" onsubmit="handleSignUpStep1Submit(event)">
+                    <h1 class="auth-title">Create account</h1>
+                    
+                    <div class="auth-field">
+                        <label for="signupUsername" class="auth-label">Choose a username</label>
+                        <input class="auth-input-underline" type="text" id="signupUsername" name="username" placeholder="Alphanumeric, 3-30 chars" autocomplete="username" spellcheck="false" required>
+                    </div>
+
+                    <div class="auth-links-row">
+                        <span class="auth-subtext">Already have an account?</span>
+                        <button type="button" class="auth-link-btn" onclick="switchAuthFlow('signin')">Sign in</button>
+                    </div>
+
+                    <div class="auth-error-box" id="signUpError1" aria-live="polite"></div>
+
+                    <div class="auth-actions-row">
+                        <button type="submit" class="auth-btn-primary" id="btnSignUpNext">Next</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ================= SIGN UP STEP 2: Password ================= -->
+            <div class="auth-step" id="signUpStep2" style="display: none;">
+                <form id="signupPasswordForm" onsubmit="handleSignUpStep2Submit(event)">
+                    <!-- Identity Tile (Back Arrow + Username) -->
+                    <div class="auth-identity-banner">
+                        <button type="button" class="auth-back-btn" onclick="backToSignUpStep1()" aria-label="Change username" title="Back to username">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <span class="auth-identity-user" id="signUpDisplayUser"></span>
+                    </div>
+
+                    <h1 class="auth-title">Create a password</h1>
+
+                    <div class="auth-field">
+                        <label for="signupPassword" class="auth-label">Password</label>
+                        <div class="auth-input-group">
+                            <input class="auth-input-underline" type="password" id="signupPassword" name="password" placeholder="Password" autocomplete="new-password" required oninput="validateLivePassword()">
+                            <button type="button" class="auth-eye-btn" id="toggleSignupPasswordBtn" onclick="togglePasswordVisibility('signupPassword', 'eyeIconSignup')" aria-label="Show password">
+                                <svg id="eyeIconSignup" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="auth-password-hints" id="passwordRulesHint">
+                        <span class="auth-hint-item" id="ruleLength">
+                            <svg class="hint-bullet" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="6"/></svg>
+                            Minimum 8 characters
+                        </span>
+                    </div>
+
+                    <div class="auth-links-row">
+                        <span class="auth-subtext">Already have an account?</span>
+                        <button type="button" class="auth-link-btn" onclick="switchAuthFlow('signin')">Sign in</button>
+                    </div>
+
+                    <div class="auth-error-box" id="signUpError2" aria-live="polite"></div>
+
+                    <div class="auth-actions-row">
+                        <button type="submit" class="auth-btn-primary" id="btnSignUpSubmit">Create account</button>
+                    </div>
+                </form>
+            </div>
+
+        </div> <!-- /authStage -->
+    </div> <!-- /authCard -->
 </div>
 
 <!-- ========== APPLICATION CONTAINER ========== -->
@@ -683,6 +823,6 @@
     <p>Synthesizing market intelligence...</p>
 </div>
 
-<script defer src="/static/app.js?v=11"></script>
+<script defer src="/static/app.js?v=12"></script>
 </body>
 </html>
