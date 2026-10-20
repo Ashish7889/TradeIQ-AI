@@ -94,7 +94,8 @@ def serve_frontend():
     return {"message": "StockSense QuantCore v3.0 — Institutional Engine Active"}
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 def health_check():
     return {
         "status": "ok",
